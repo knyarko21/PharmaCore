@@ -15,7 +15,7 @@ import {
   CheckCircle2,
   AlertCircle,
   LoaderCircle,
-  Sparkles
+  Sparkles,
 } from "lucide-react";
 
 import api from "../services/api";
@@ -55,20 +55,25 @@ const initialSettings = {
   purchaseAlerts: false,
   currency: "GHS",
   dateFormat: "DD/MM/YYYY",
-  theme: "Dark"
+  theme: "Dark",
 };
+
+// ======================================================
+// Normalize Settings
+// Dark mode is enforced regardless of the backend value.
+// ======================================================
 
 const normalizeSettings = (data = {}) => ({
   ...initialSettings,
   ...data,
   email: data.email ?? "",
   phone: data.phone ?? "",
-  address: data.address ?? ""
+  address: data.address ?? "",
+  theme: "Dark",
 });
 
 // ======================================================
 // Reusable Toggle Component
-// Declared outside Settings to preserve component identity
 // ======================================================
 
 const Toggle = ({
@@ -77,10 +82,10 @@ const Toggle = ({
   description,
   checked,
   onChange,
-  disabled
+  disabled,
 }) => (
   <div className="flex items-center justify-between gap-4 border-b border-white/[0.06] py-5 transition last:border-0">
-    <div>
+    <div className="min-w-0">
       <p className="font-medium text-zinc-100">{label}</p>
 
       <p className="mt-1 text-sm text-zinc-500">{description}</p>
@@ -110,7 +115,6 @@ const Toggle = ({
 
 // ======================================================
 // Reusable Input Component
-// Declared outside Settings to preserve component identity
 // ======================================================
 
 const Field = ({
@@ -121,9 +125,9 @@ const Field = ({
   icon: Icon,
   value,
   onChange,
-  disabled
+  disabled,
 }) => (
-  <div>
+  <div className="min-w-0">
     <label
       htmlFor={name}
       className="mb-2 block text-sm font-medium text-zinc-300"
@@ -160,6 +164,7 @@ const Field = ({
 
 const Settings = () => {
   const [activeTab, setActiveTab] = useState("general");
+
   const [settings, setSettings] = useState(initialSettings);
   const [savedSettings, setSavedSettings] = useState(initialSettings);
 
@@ -168,6 +173,24 @@ const Settings = () => {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+
+  // ==================================
+  // Enforce Dark Theme
+  // ==================================
+
+  useEffect(() => {
+    const root = document.documentElement;
+
+    root.classList.add("dark");
+    root.dataset.theme = "dark";
+    root.style.colorScheme = "dark";
+
+    try {
+      localStorage.setItem("pharmacore_theme", "dark");
+    } catch (err) {
+      console.error("Could not save theme preference:", err);
+    }
+  }, []);
 
   // ==================================
   // Load Settings From The Backend
@@ -184,7 +207,7 @@ const Settings = () => {
 
         if (cancelled) return;
 
-        const data = normalizeSettings(response.data.settings);
+        const data = normalizeSettings(response.data?.settings ?? {});
 
         setSettings(data);
         setSavedSettings(data);
@@ -216,9 +239,13 @@ const Settings = () => {
   // ==================================
 
   const updateSetting = (name, value) => {
+    // Never allow the application theme to change.
+    if (name === "theme") return;
+
     setSettings((current) => ({
       ...current,
-      [name]: value
+      [name]: value,
+      theme: "Dark",
     }));
 
     setSaved(false);
@@ -231,7 +258,11 @@ const Settings = () => {
   // ==================================
 
   const resetSettings = () => {
-    setSettings({ ...savedSettings });
+    setSettings({
+      ...savedSettings,
+      theme: "Dark",
+    });
+
     setSaved(false);
     setError("");
     setMessage("Unsaved changes have been reset.");
@@ -248,14 +279,26 @@ const Settings = () => {
       setError("");
       setMessage("");
 
-      const response = await api.put("/settings", settings);
+      const settingsToSave = {
+        ...settings,
+        theme: "Dark",
+      };
 
-      const data = normalizeSettings(response.data.settings);
+      const response = await api.put("/settings", settingsToSave);
+
+      // Enforce Dark locally even if the backend returns an older theme.
+      const data = normalizeSettings(response.data?.settings ?? settingsToSave);
 
       setSettings(data);
       setSavedSettings(data);
       setSaved(true);
       setMessage("Your settings have been saved successfully.");
+
+      try {
+        localStorage.setItem("pharmacore_theme", "dark");
+      } catch (storageError) {
+        console.error("Could not save theme preference:", storageError);
+      }
     } catch (err) {
       console.error("Save settings error:", err);
 
@@ -268,27 +311,31 @@ const Settings = () => {
     }
   };
 
+  // ==================================
+  // Settings Tabs
+  // ==================================
+
   const tabs = [
     {
       id: "general",
       label: "General",
-      icon: Building2
+      icon: Building2,
     },
     {
       id: "notifications",
       label: "Notifications",
-      icon: Bell
+      icon: Bell,
     },
     {
       id: "security",
       label: "Security",
-      icon: ShieldCheck
+      icon: ShieldCheck,
     },
     {
       id: "preferences",
       label: "Preferences",
-      icon: SlidersHorizontal
-    }
+      icon: SlidersHorizontal,
+    },
   ];
 
   // ==================================
@@ -297,7 +344,7 @@ const Settings = () => {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center p-6 text-white">
+      <div className="flex min-h-[60vh] items-center justify-center p-6 text-white">
         <div className="flex flex-col items-center gap-4">
           <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl border border-violet-500/20 bg-gradient-to-br from-violet-500/[0.12] to-fuchsia-500/[0.06] shadow-lg shadow-violet-500/10">
             <LoaderCircle
@@ -306,13 +353,12 @@ const Settings = () => {
             />
 
             <span className="absolute -right-1 -top-1 h-4 w-4 animate-ping rounded-full bg-emerald-400/70" />
+
             <span className="absolute -right-1 -top-1 h-4 w-4 rounded-full bg-emerald-400" />
           </div>
 
           <div className="text-center">
-            <p className="font-semibold text-white">
-              Loading your settings
-            </p>
+            <p className="font-semibold text-white">Loading your settings</p>
 
             <p className="mt-1 text-sm text-zinc-500">
               Connecting to PharmaCore...
@@ -328,17 +374,18 @@ const Settings = () => {
   // ==================================
 
   return (
-    <div className="relative min-h-screen overflow-hidden text-zinc-100">
+    <div className="relative min-h-full overflow-hidden text-zinc-100">
       {/* Ambient background orbs */}
       <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
-        <div className="absolute -top-40 -right-40 h-[500px] w-[500px] rounded-full bg-violet-600/[0.09] blur-[120px]" />
-        <div className="absolute top-1/3 -left-40 h-[450px] w-[450px] rounded-full bg-fuchsia-600/[0.06] blur-[120px]" />
+        <div className="absolute -right-40 -top-40 h-[500px] w-[500px] rounded-full bg-violet-600/[0.09] blur-[120px]" />
+
+        <div className="absolute -left-40 top-1/3 h-[450px] w-[450px] rounded-full bg-fuchsia-600/[0.06] blur-[120px]" />
+
         <div className="absolute -bottom-40 right-1/3 h-[400px] w-[400px] rounded-full bg-emerald-600/[0.05] blur-[120px]" />
       </div>
 
-      <div className="mx-auto max-w-7xl p-4 sm:p-6 lg:p-8">
+      <div className="mx-auto w-full max-w-7xl p-4 sm:p-6 lg:p-8">
         {/* Page Header */}
-
         <div className="mb-8">
           <div className="mb-2 flex items-center gap-2 text-sm text-violet-400">
             <span className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-violet-500/10 ring-1 ring-inset ring-violet-500/20">
@@ -348,7 +395,7 @@ const Settings = () => {
             <span>System Configuration</span>
           </div>
 
-          <h1 className="flex items-center gap-2.5 text-3xl font-bold tracking-tight text-white">
+          <h1 className="flex flex-wrap items-center gap-2.5 text-3xl font-bold tracking-tight text-white">
             Settings
             <Sparkles size={20} className="text-violet-400/70" />
           </h1>
@@ -358,8 +405,7 @@ const Settings = () => {
           </p>
         </div>
 
-        {/* Status Messages */}
-
+        {/* Error Message */}
         {error && (
           <div
             role="alert"
@@ -367,7 +413,7 @@ const Settings = () => {
           >
             <AlertCircle size={19} className="shrink-0" />
 
-            <div className="flex-1">
+            <div className="min-w-0 flex-1">
               {error}
 
               <button
@@ -381,6 +427,7 @@ const Settings = () => {
           </div>
         )}
 
+        {/* Success / Status Message */}
         {message && (
           <div
             role="status"
@@ -390,13 +437,13 @@ const Settings = () => {
                 : "border-white/[0.08] bg-white/[0.03] text-zinc-300"
             }`}
           >
-            <CheckCircle2 size={19} />
-            {message}
+            <CheckCircle2 size={19} className="shrink-0" />
+
+            <span>{message}</span>
           </div>
         )}
 
         {/* Navigation Tabs */}
-
         <div className="mb-6 flex gap-2 overflow-x-auto border-b border-white/[0.06] pb-3">
           {tabs.map((tab) => {
             const Icon = tab.icon;
@@ -421,7 +468,6 @@ const Settings = () => {
         </div>
 
         {/* Settings Panel */}
-
         <div className="overflow-hidden rounded-3xl border border-white/[0.08] bg-white/[0.02] shadow-2xl shadow-black/40 backdrop-blur-2xl">
           <div className="border-b border-white/[0.06] bg-gradient-to-r from-white/[0.02] to-transparent p-5 sm:p-7">
             <div className="flex items-center gap-3">
@@ -439,7 +485,6 @@ const Settings = () => {
 
           <div className="p-5 sm:p-7">
             {/* General Settings */}
-
             {activeTab === "general" && (
               <div className="grid max-w-3xl gap-5 sm:grid-cols-2">
                 <Field
@@ -447,7 +492,7 @@ const Settings = () => {
                   name="pharmacyName"
                   value={settings.pharmacyName}
                   onChange={updateSetting}
-                  disabled={loading || saving}
+                  disabled={saving}
                   placeholder="Pharmacy name"
                   icon={Building2}
                 />
@@ -458,7 +503,7 @@ const Settings = () => {
                   type="email"
                   value={settings.email}
                   onChange={updateSetting}
-                  disabled={loading || saving}
+                  disabled={saving}
                   placeholder="admin@example.com"
                   icon={Mail}
                 />
@@ -469,7 +514,7 @@ const Settings = () => {
                   type="tel"
                   value={settings.phone}
                   onChange={updateSetting}
-                  disabled={loading || saving}
+                  disabled={saving}
                   placeholder="Phone number"
                   icon={Phone}
                 />
@@ -479,7 +524,7 @@ const Settings = () => {
                   name="address"
                   value={settings.address}
                   onChange={updateSetting}
-                  disabled={loading || saving}
+                  disabled={saving}
                   placeholder="Pharmacy address"
                   icon={MapPin}
                 />
@@ -487,40 +532,38 @@ const Settings = () => {
             )}
 
             {/* Notification Settings */}
-
             {activeTab === "notifications" && (
               <div className="max-w-3xl">
                 <Toggle
                   name="lowStockAlerts"
                   label="Low Stock Alerts"
                   description="Get notified when products fall below minimum stock levels."
-                  checked={settings.lowStockAlerts}
+                  checked={Boolean(settings.lowStockAlerts)}
                   onChange={updateSetting}
-                  disabled={loading || saving}
+                  disabled={saving}
                 />
 
                 <Toggle
                   name="expiryAlerts"
                   label="Expiry Warnings"
                   description="Receive warnings about medicines approaching expiry."
-                  checked={settings.expiryAlerts}
+                  checked={Boolean(settings.expiryAlerts)}
                   onChange={updateSetting}
-                  disabled={loading || saving}
+                  disabled={saving}
                 />
 
                 <Toggle
                   name="purchaseAlerts"
                   label="Purchase Updates"
                   description="Receive updates about purchase orders and deliveries."
-                  checked={settings.purchaseAlerts}
+                  checked={Boolean(settings.purchaseAlerts)}
                   onChange={updateSetting}
-                  disabled={loading || saving}
+                  disabled={saving}
                 />
               </div>
             )}
 
             {/* Security Settings */}
-
             {activeTab === "security" && (
               <div className="max-w-3xl space-y-5">
                 <div className="relative overflow-hidden rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/[0.08] to-transparent p-4">
@@ -565,9 +608,9 @@ const Settings = () => {
             )}
 
             {/* Application Preferences */}
-
             {activeTab === "preferences" && (
               <div className="grid max-w-3xl gap-5 sm:grid-cols-2">
+                {/* Currency */}
                 <div>
                   <label
                     htmlFor="currency"
@@ -579,11 +622,11 @@ const Settings = () => {
                   <select
                     id="currency"
                     value={settings.currency}
-                    disabled={loading || saving}
+                    disabled={saving}
                     onChange={(event) =>
                       updateSetting("currency", event.target.value)
                     }
-                    className="w-full cursor-pointer rounded-xl border border-white/[0.08] bg-black/40 px-4 py-3 text-sm text-white outline-none transition-all focus:border-violet-500/40 focus:bg-black/60 focus:ring-4 focus:ring-violet-500/[0.08] disabled:opacity-50"
+                    className="w-full cursor-pointer rounded-xl border border-white/[0.08] bg-black/40 px-4 py-3 text-sm text-white outline-none transition-all focus:border-violet-500/40 focus:bg-black/60 focus:ring-4 focus:ring-violet-500/[0.08] disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <option value="GHS" className="bg-[#111113]">
                       GHS (GH₵)
@@ -599,6 +642,7 @@ const Settings = () => {
                   </select>
                 </div>
 
+                {/* Date Format */}
                 <div>
                   <label
                     htmlFor="dateFormat"
@@ -610,11 +654,11 @@ const Settings = () => {
                   <select
                     id="dateFormat"
                     value={settings.dateFormat}
-                    disabled={loading || saving}
+                    disabled={saving}
                     onChange={(event) =>
                       updateSetting("dateFormat", event.target.value)
                     }
-                    className="w-full cursor-pointer rounded-xl border border-white/[0.08] bg-black/40 px-4 py-3 text-sm text-white outline-none transition-all focus:border-violet-500/40 focus:bg-black/60 focus:ring-4 focus:ring-violet-500/[0.08] disabled:opacity-50"
+                    className="w-full cursor-pointer rounded-xl border border-white/[0.08] bg-black/40 px-4 py-3 text-sm text-white outline-none transition-all focus:border-violet-500/40 focus:bg-black/60 focus:ring-4 focus:ring-violet-500/[0.08] disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <option value="DD/MM/YYYY" className="bg-[#111113]">
                       DD/MM/YYYY
@@ -630,6 +674,7 @@ const Settings = () => {
                   </select>
                 </div>
 
+                {/* Permanent Dark Theme */}
                 <div>
                   <label
                     htmlFor="theme"
@@ -640,29 +685,22 @@ const Settings = () => {
 
                   <select
                     id="theme"
-                    value={settings.theme}
-                    disabled={loading || saving}
-                    onChange={(event) =>
-                      updateSetting("theme", event.target.value)
-                    }
-                    className="w-full cursor-pointer rounded-xl border border-white/[0.08] bg-black/40 px-4 py-3 text-sm text-white outline-none transition-all focus:border-violet-500/40 focus:bg-black/60 focus:ring-4 focus:ring-violet-500/[0.08] disabled:opacity-50"
+                    value="Dark"
+                    disabled
+                    aria-describedby="theme-description"
+                    className="w-full cursor-not-allowed rounded-xl border border-violet-500/20 bg-violet-500/[0.06] px-4 py-3 text-sm text-violet-300 outline-none disabled:opacity-100"
                   >
                     <option value="Dark" className="bg-[#111113]">
                       Dark
                     </option>
-
-                    <option value="Light" className="bg-[#111113]">
-                      Light
-                    </option>
-
-                    <option value="System" className="bg-[#111113]">
-                      System Default
-                    </option>
                   </select>
 
-                  <p className="mt-2 text-xs text-zinc-600">
-                    The selected theme is saved, but does not yet change the
-                    overall interface.
+                  <p
+                    id="theme-description"
+                    className="mt-2 text-xs leading-5 text-zinc-500"
+                  >
+                    Dark mode is permanently enabled for PharmaCore to
+                    maintain a consistent application appearance.
                   </p>
                 </div>
               </div>
@@ -670,7 +708,6 @@ const Settings = () => {
           </div>
 
           {/* Footer Actions */}
-
           <div className="flex flex-col gap-3 border-t border-white/[0.06] bg-black/20 p-5 backdrop-blur-sm sm:flex-row sm:items-center sm:justify-between sm:px-7">
             <p className="text-sm text-zinc-500">
               {saved
@@ -703,16 +740,19 @@ const Settings = () => {
                       size={17}
                       className="relative animate-spin"
                     />
+
                     <span className="relative">Saving...</span>
                   </>
                 ) : saved ? (
                   <>
                     <CheckCircle2 size={17} className="relative" />
+
                     <span className="relative">Saved</span>
                   </>
                 ) : (
                   <>
                     <Save size={17} className="relative" />
+
                     <span className="relative">Save Changes</span>
                   </>
                 )}

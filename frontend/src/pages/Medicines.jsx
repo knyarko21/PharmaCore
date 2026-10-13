@@ -555,7 +555,8 @@ const Medicines = () => {
       barcode: medicine.barcode || "",
       reorderLevel: medicine.reorderLevel ?? 10,
       isPrescriptionRequired: Boolean(medicine.isPrescriptionRequired),
-      categoryId: medicine.categoryId || ""
+      // normalize to string to match select option values
+      categoryId: medicine.categoryId ? String(medicine.categoryId) : ""
     });
 
     setFormError("");
@@ -642,7 +643,8 @@ const Medicines = () => {
         barcode: form.barcode.trim() || undefined,
         reorderLevel: Number(form.reorderLevel),
         isPrescriptionRequired: Boolean(form.isPrescriptionRequired),
-        categoryId: Number(form.categoryId)
+        // send categoryId as-is (string or numeric string). Avoid Number(...) which may produce NaN.
+        categoryId: form.categoryId
       };
 
       const response = editingMedicine
@@ -666,11 +668,18 @@ const Medicines = () => {
       ]);
     } catch (err) {
       console.error("Save medicine error:", err);
+      console.error("Backend response:", err.response?.status, err.response?.data);
+
+      const serverMessage =
+        err.response?.data?.message ||
+        err.response?.data ||
+        err.message ||
+        "Unable to save medicine.";
 
       setFormError(
-        err.response?.data?.message ||
-          err.message ||
-          "Unable to save medicine."
+        typeof serverMessage === "string"
+          ? serverMessage
+          : JSON.stringify(serverMessage)
       );
     } finally {
       setSaving(false);
@@ -1005,7 +1014,7 @@ const Medicines = () => {
                 <option value="all">All Categories</option>
 
                 {categories.map((category) => (
-                  <option key={category.id} value={category.id}>
+                  <option key={category.id} value={String(category.id)}>
                     {category.name}
                   </option>
                 ))}
@@ -1566,7 +1575,7 @@ const Medicines = () => {
                         <option value="">Select Category...</option>
 
                         {categories.map((category) => (
-                          <option key={category.id} value={category.id}>
+                          <option key={category.id} value={String(category.id)}>
                             {category.name}
                           </option>
                         ))}

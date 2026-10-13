@@ -5,16 +5,16 @@ const path = require("path");
 require("dotenv").config();
 
 // ======================================================
-// Database
+// Database and Models
 // ======================================================
 
 const sequelize = require("./config/database");
 
-// Load models and register all associations.
+// Register models and associations.
 require("./models");
 
 // ======================================================
-// Middleware
+// Error Middleware
 // ======================================================
 
 const {
@@ -58,7 +58,8 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // ======================================================
-// Static file serving for uploaded images
+// Static Uploaded Files
+// Note: Vercel's filesystem is not persistent storage.
 // ======================================================
 
 app.use(
@@ -70,12 +71,47 @@ app.use(
 // Health Check
 // ======================================================
 
-app.get("/", (req, res) =>
+app.get("/", (req, res) => {
   res.status(200).json({
     success: true,
     message: "PharmaCore API is running."
-  })
-);
+  });
+});
+
+// ======================================================
+// Database Connection for Serverless Requests
+// ======================================================
+
+let databaseConnectionPromise = null;
+
+const ensureDatabaseConnection = async () => {
+  if (!databaseConnectionPromise) {
+    databaseConnectionPromise = sequelize.authenticate().catch((error) => {
+      // Allow a later request to retry if the connection fails.
+      databaseConnectionPromise = null;
+      throw error;
+    });
+  }
+
+  return databaseConnectionPromise;
+};
+
+app.use("/api", async (req, res, next) => {
+  try {
+    await ensureDatabaseConnection();
+    next();
+  } catch (error) {
+    console.error(
+      "PharmaCore database connection failed:",
+      error.message
+    );
+
+    res.status(503).json({
+      success: false,
+      message: "The database is temporarily unavailable."
+    });
+  }
+});
 
 // ======================================================
 // API Routes
@@ -99,35 +135,57 @@ app.use("/api/settings", settingsRoutes);
 app.use("/api/uploads", uploadRoutes);
 
 // ======================================================
-// 404 + Error Handling
+// 404 and Error Handling
 // ======================================================
 
 app.use(notFoundMiddleware);
 app.use(errorMiddleware);
 
 // ======================================================
-// Start Server
+// Local Development Server
+//
+// Vercel imports the Express app instead of relying on
+// this local startup block.
 // ======================================================
 
-const PORT = Number(process.env.PORT) || 5000;
+if (require.main === module) {
+  const PORT = Number(process.env.PORT) || 5000;
 
-const startServer = async () => {
-  try {
-    await sequelize.authenticate();
-    console.log("Database connection established successfully.");
+  const startServer = async () => {
+    try {
+      await sequelize.authenticate();
 
-    await sequelize.sync();
-    console.log("Database models synchronized successfully.");
+      console.log(
+        "Database connection established successfully."
+      );
 
-    app.listen(PORT, () => {
-      console.log(`PharmaCore API running on port ${PORT}.`);
-    });
-  } catch (error) {
-    console.error("Failed to start PharmaCore API:", error.message);
-    process.exitCode = 1;
-  }
-};
+      // Local development only.
+      // Do not automatically synchronize production tables.
+      if (process.env.NODE_ENV !== "production") {
+        await sequelize.sync();
 
-startServer();
+        console.log(
+          "Database models synchronized successfully."
+        );
+      }
 
+      app.listen(PORT, () => {
+        console.log(
+          `PharmaCore API running on port ${PORT}.`
+        );
+      });
+    } catch (error) {
+      console.error(
+        "Failed to start PharmaCore API:",
+        error.message
+      );
+
+      process.exitCode = 1;
+    }
+  };
+
+  startServer();
+}
+
+// Export the Express application for Vercel.
 module.exports = app;
