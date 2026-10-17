@@ -91,11 +91,12 @@ function ReceivePurchase() {
           item.medicine?.name ||
           item.Medicine?.name ||
           `Medicine #${item.medicineId}`,
-
         orderedQuantity: Number(item.quantity || 0),
         quantity: Number(item.quantity || 0),
 
+        // Blank means the backend should generate a batch number.
         batchNumber: "",
+
         sellingPrice: "",
         expiryDate: "",
         manufactureDate: ""
@@ -113,8 +114,8 @@ function ReceivePurchase() {
 
       setError(
         err.response?.data?.message ||
-        err.message ||
-        "Failed to load purchase."
+          err.message ||
+          "Failed to load purchase."
       );
     } finally {
       setLoading(false);
@@ -149,14 +150,13 @@ function ReceivePurchase() {
   // Format Currency
   // ======================================================
 
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat("en-GH", {
+  const formatCurrency = (amount) =>
+    new Intl.NumberFormat("en-GH", {
       style: "currency",
       currency: "GHS",
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
     }).format(Number(amount || 0));
-  };
 
   // ======================================================
   // Validate Form
@@ -191,22 +191,18 @@ function ReceivePurchase() {
         return `Received quantity for ${item.medicineName} must be a whole number greater than zero.`;
       }
 
-      if (
-        Number(item.quantity) >
-        Number(item.orderedQuantity)
-      ) {
+      if (Number(item.quantity) > Number(item.orderedQuantity)) {
         return `Received quantity for ${item.medicineName} cannot exceed the ordered quantity of ${item.orderedQuantity}.`;
       }
 
-      if (!item.batchNumber.trim()) {
-        return `Enter a batch number for ${item.medicineName}.`;
-      }
+      // Batch numbers are optional because the backend generates them.
+      const batchNumber = item.batchNumber.trim();
 
-      if (item.batchNumber.trim().length < 2) {
+      if (batchNumber && batchNumber.length < 2) {
         return `The batch number for ${item.medicineName} must contain at least 2 characters.`;
       }
 
-      if (item.batchNumber.trim().length > 100) {
+      if (batchNumber.length > 100) {
         return `The batch number for ${item.medicineName} cannot exceed 100 characters.`;
       }
 
@@ -222,10 +218,7 @@ function ReceivePurchase() {
         return `Enter an expiry date for ${item.medicineName}.`;
       }
 
-      // Check that expiry date is a real calendar date.
-      const expiryDate = new Date(
-        `${item.expiryDate}T00:00:00`
-      );
+      const expiryDate = new Date(`${item.expiryDate}T00:00:00`);
 
       if (
         Number.isNaN(expiryDate.getTime()) ||
@@ -281,16 +274,18 @@ function ReceivePurchase() {
       return;
     }
 
-    // IMPORTANT:
-    // The backend validator accepts an empty string for an
-    // optional manufacture date, but it does not accept null.
     const payload = {
       items: items.map((item) => ({
         purchaseItemId: Number(item.purchaseItemId),
         quantity: Number(item.quantity),
+
+        // An empty string tells the backend to generate the batch number.
         batchNumber: item.batchNumber.trim(),
+
         sellingPrice: Number(item.sellingPrice),
         expiryDate: item.expiryDate,
+
+        // Preserve the empty-string behavior expected by your validator.
         manufactureDate: item.manufactureDate || ""
       }))
     };
@@ -298,30 +293,22 @@ function ReceivePurchase() {
     try {
       setSubmitting(true);
 
-      console.log("Receiving purchase:", id);
-      console.log("Receive purchase payload:", payload);
-
       const response = await api.post(
         `/purchases/${id}/receive`,
         payload
       );
 
-      console.log(
-        "Receive purchase response:",
-        response.data
-      );
+      console.log("Receive purchase response:", response.data);
 
       setSuccess(
         response.data?.message ||
-        "Purchase received successfully. Stock has been added to inventory."
+          "Purchase received successfully. Stock has been added to inventory."
       );
 
-      // Refresh purchase information after receiving.
-      // The status guard below will then show the processed screen.
       await fetchPurchase();
 
-      // Navigate to the purchase details page after a short delay.
-      setTimeout(() => {
+      // Return to purchase details after a short delay.
+      window.setTimeout(() => {
         navigate(`/purchases/${id}`);
       }, 1200);
     } catch (err) {
@@ -329,11 +316,6 @@ function ReceivePurchase() {
 
       const responseData = err.response?.data;
       const validationErrors = responseData?.errors;
-
-      console.error(
-        "Backend response:",
-        responseData
-      );
 
       if (
         Array.isArray(validationErrors) &&
@@ -346,17 +328,15 @@ function ReceivePurchase() {
               const message =
                 validationError.message || "Invalid input";
 
-              return field
-                ? `${field}: ${message}`
-                : message;
+              return field ? `${field}: ${message}` : message;
             })
             .join(" · ")
         );
       } else {
         setError(
           responseData?.message ||
-          err.message ||
-          "Failed to receive purchase."
+            err.message ||
+            "Failed to receive purchase."
         );
       }
     } finally {
@@ -373,13 +353,9 @@ function ReceivePurchase() {
       <div className="flex min-h-[70vh] items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl border border-violet-500/20 bg-gradient-to-br from-violet-500/[0.12] to-fuchsia-500/[0.06] shadow-lg shadow-violet-500/10">
-            <Truck
-              size={28}
-              className="text-violet-400"
-            />
+            <Truck size={28} className="text-violet-400" />
 
             <span className="absolute -right-1 -top-1 h-4 w-4 animate-ping rounded-full bg-emerald-400/70" />
-
             <span className="absolute -right-1 -top-1 h-4 w-4 rounded-full bg-emerald-400" />
           </div>
 
@@ -387,7 +363,6 @@ function ReceivePurchase() {
             <p className="font-semibold text-white">
               Loading purchase
             </p>
-
             <p className="mt-1 text-sm text-zinc-500">
               Preparing receiving form...
             </p>
@@ -484,9 +459,7 @@ function ReceivePurchase() {
     <div className="relative min-h-full overflow-hidden text-zinc-100">
       <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
         <div className="absolute -right-40 -top-40 h-[500px] w-[500px] rounded-full bg-emerald-600/[0.08] blur-[120px]" />
-
         <div className="absolute -left-40 top-1/3 h-[450px] w-[450px] rounded-full bg-violet-600/[0.07] blur-[120px]" />
-
         <div className="absolute -bottom-40 right-1/3 h-[400px] w-[400px] rounded-full bg-fuchsia-600/[0.05] blur-[120px]" />
       </div>
 
@@ -510,11 +483,7 @@ function ReceivePurchase() {
               <div className="flex flex-wrap items-center gap-3">
                 <h1 className="flex items-center gap-2.5 text-2xl font-bold tracking-tight text-white">
                   Receive Purchase
-
-                  <Sparkles
-                    size={18}
-                    className="text-emerald-400/70"
-                  />
+                  <Sparkles size={18} className="text-emerald-400/70" />
                 </h1>
 
                 <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/20 bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-400 backdrop-blur-sm">
@@ -533,82 +502,37 @@ function ReceivePurchase() {
         {/* Purchase Summary Cards */}
 
         <div className="grid gap-4 md:grid-cols-3">
-          <div className="group relative overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.02] p-5 shadow-2xl shadow-black/40 backdrop-blur-2xl transition-all duration-300 hover:-translate-y-1 hover:border-white/[0.15]">
-            <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-violet-500/[0.14] to-transparent" />
+          <SummaryCard
+            label="Purchase Number"
+            value={purchase.purchaseNumber || `PUR-${purchase.id}`}
+            icon={Package}
+            accent="violet"
+          />
 
-            <div className="relative flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
-                  Purchase Number
-                </p>
+          <SummaryCard
+            label="Purchase Date"
+            value={
+              purchase.purchaseDate
+                ? new Date(purchase.purchaseDate).toLocaleDateString(
+                    "en-GH",
+                    {
+                      year: "numeric",
+                      month: "long",
+                      day: "numeric"
+                    }
+                  )
+                : "—"
+            }
+            icon={CalendarDays}
+            accent="sky"
+          />
 
-                <p className="mt-2 break-words text-lg font-semibold text-white">
-                  {purchase.purchaseNumber || `PUR-${purchase.id}`}
-                </p>
-              </div>
-
-              <IconBox
-                size="lg"
-                className="bg-violet-500/10 text-violet-400 ring-violet-500/20"
-              >
-                <Package size={19} />
-              </IconBox>
-            </div>
-          </div>
-
-          <div className="group relative overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.02] p-5 shadow-2xl shadow-black/40 backdrop-blur-2xl transition-all duration-300 hover:-translate-y-1 hover:border-white/[0.15]">
-            <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-sky-500/[0.14] to-transparent" />
-
-            <div className="relative flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
-                  Purchase Date
-                </p>
-
-                <p className="mt-2 break-words text-sm font-medium text-white">
-                  {purchase.purchaseDate
-                    ? new Date(
-                        purchase.purchaseDate
-                      ).toLocaleDateString("en-GH", {
-                        year: "numeric",
-                        month: "long",
-                        day: "numeric"
-                      })
-                    : "—"}
-                </p>
-              </div>
-
-              <IconBox
-                size="lg"
-                className="bg-sky-500/10 text-sky-400 ring-sky-500/20"
-              >
-                <CalendarDays size={19} />
-              </IconBox>
-            </div>
-          </div>
-
-          <div className="group relative overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.02] p-5 shadow-2xl shadow-black/40 backdrop-blur-2xl transition-all duration-300 hover:-translate-y-1 hover:border-white/[0.15]">
-            <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-emerald-500/[0.14] to-transparent" />
-
-            <div className="relative flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
-                  Medicines
-                </p>
-
-                <p className="mt-2 text-lg font-semibold text-white">
-                  {items.length}
-                </p>
-              </div>
-
-              <IconBox
-                size="lg"
-                className="bg-emerald-500/10 text-emerald-400 ring-emerald-500/20"
-              >
-                <Package size={19} />
-              </IconBox>
-            </div>
-          </div>
+          <SummaryCard
+            label="Medicines"
+            value={items.length}
+            icon={Package}
+            accent="emerald"
+          />
         </div>
 
         {/* Error Message */}
@@ -627,7 +551,6 @@ function ReceivePurchase() {
               <p className="text-sm font-medium text-red-300">
                 Unable to receive purchase
               </p>
-
               <p className="mt-1 break-words text-sm text-red-400/80">
                 {error}
               </p>
@@ -651,7 +574,6 @@ function ReceivePurchase() {
               <p className="text-sm font-medium text-emerald-300">
                 Purchase received
               </p>
-
               <p className="mt-1 text-sm text-emerald-400/80">
                 {success}
               </p>
@@ -683,7 +605,6 @@ function ReceivePurchase() {
                       <h2 className="font-semibold text-white">
                         {item.medicineName}
                       </h2>
-
                       <p className="mt-0.5 text-xs text-zinc-500">
                         Purchase item #{item.purchaseItemId}
                       </p>
@@ -695,7 +616,6 @@ function ReceivePurchase() {
                       <p className="text-[10px] uppercase tracking-wider text-zinc-500">
                         Ordered
                       </p>
-
                       <p className="mt-0.5 text-sm font-semibold text-white">
                         {item.orderedQuantity}
                       </p>
@@ -705,7 +625,6 @@ function ReceivePurchase() {
                       <p className="text-[10px] uppercase tracking-wider text-emerald-500/70">
                         Receiving
                       </p>
-
                       <p className="mt-0.5 text-sm font-semibold text-emerald-400">
                         {item.quantity}
                       </p>
@@ -736,11 +655,7 @@ function ReceivePurchase() {
                     required
                     value={item.quantity}
                     onChange={(event) =>
-                      updateItem(
-                        index,
-                        "quantity",
-                        event.target.value
-                      )
+                      updateItem(index, "quantity", event.target.value)
                     }
                     className="w-full rounded-xl border border-white/[0.08] bg-black/40 px-4 py-3 text-sm text-white outline-none transition-all placeholder:text-zinc-600 focus:border-violet-500/40 focus:bg-black/60 focus:ring-4 focus:ring-violet-500/[0.08]"
                   />
@@ -750,14 +665,17 @@ function ReceivePurchase() {
                   </p>
                 </div>
 
-                {/* Batch Number */}
+                {/* Optional Batch Number */}
 
                 <div>
                   <label
                     htmlFor={`batch-number-${index}`}
                     className="mb-2 block text-sm font-medium text-zinc-300"
                   >
-                    Batch Number
+                    Batch Number{" "}
+                    <span className="text-xs font-normal text-emerald-400">
+                      (auto-generated if blank)
+                    </span>
                   </label>
 
                   <input
@@ -765,18 +683,18 @@ function ReceivePurchase() {
                     type="text"
                     minLength="2"
                     maxLength="100"
-                    required
                     value={item.batchNumber}
                     onChange={(event) =>
-                      updateItem(
-                        index,
-                        "batchNumber",
-                        event.target.value
-                      )
+                      updateItem(index, "batchNumber", event.target.value)
                     }
-                    placeholder="e.g. BATCH-PARA-001"
+                    placeholder="Leave blank to generate automatically"
                     className="w-full rounded-xl border border-white/[0.08] bg-black/40 px-4 py-3 text-sm text-white outline-none transition-all placeholder:text-zinc-600 focus:border-violet-500/40 focus:bg-black/60 focus:ring-4 focus:ring-violet-500/[0.08]"
                   />
+
+                  <p className="mt-1.5 text-xs text-zinc-600">
+                    Enter the supplier's batch number if available. Otherwise,
+                    PharmaCore will generate one.
+                  </p>
                 </div>
 
                 {/* Selling Price */}
@@ -802,11 +720,7 @@ function ReceivePurchase() {
                       required
                       value={item.sellingPrice}
                       onChange={(event) =>
-                        updateItem(
-                          index,
-                          "sellingPrice",
-                          event.target.value
-                        )
+                        updateItem(index, "sellingPrice", event.target.value)
                       }
                       placeholder="0.00"
                       className="w-full rounded-xl border border-white/[0.08] bg-black/40 py-3 pl-14 pr-4 text-sm text-white outline-none transition-all placeholder:text-zinc-600 focus:border-violet-500/40 focus:bg-black/60 focus:ring-4 focus:ring-violet-500/[0.08]"
@@ -830,11 +744,7 @@ function ReceivePurchase() {
                     required
                     value={item.expiryDate}
                     onChange={(event) =>
-                      updateItem(
-                        index,
-                        "expiryDate",
-                        event.target.value
-                      )
+                      updateItem(index, "expiryDate", event.target.value)
                     }
                     className="w-full rounded-xl border border-white/[0.08] bg-black/40 px-4 py-3 text-sm text-white outline-none transition-all focus:border-violet-500/40 focus:bg-black/60 focus:ring-4 focus:ring-violet-500/[0.08]"
                   />
@@ -847,7 +757,7 @@ function ReceivePurchase() {
                     htmlFor={`manufacture-date-${index}`}
                     className="mb-2 block text-sm font-medium text-zinc-300"
                   >
-                    Manufacture Date
+                    Manufacture Date{" "}
                     <span className="ml-1 text-xs text-zinc-600">
                       (optional)
                     </span>
@@ -867,9 +777,7 @@ function ReceivePurchase() {
                     className="w-full rounded-xl border border-white/[0.08] bg-black/40 px-4 py-3 text-sm text-white outline-none transition-all focus:border-violet-500/40 focus:bg-black/60 focus:ring-4 focus:ring-violet-500/[0.08]"
                   />
 
-                  <p className="mt-1.5 text-xs text-zinc-600">
-                    Optional
-                  </p>
+                  <p className="mt-1.5 text-xs text-zinc-600">Optional</p>
                 </div>
               </div>
             </div>
@@ -901,18 +809,12 @@ function ReceivePurchase() {
                     size={17}
                     className="relative animate-spin"
                   />
-
-                  <span className="relative">
-                    Receiving...
-                  </span>
+                  <span className="relative">Receiving...</span>
                 </>
               ) : (
                 <>
                   <Save size={17} className="relative" />
-
-                  <span className="relative">
-                    Receive Stock
-                  </span>
+                  <span className="relative">Receive Stock</span>
                 </>
               )}
             </button>
@@ -922,5 +824,61 @@ function ReceivePurchase() {
     </div>
   );
 }
+
+// ======================================================
+// Summary Card
+// ======================================================
+
+const SummaryCard = ({
+  label,
+  value,
+  icon: Icon,
+  accent = "violet"
+}) => {
+  const accents = {
+    violet: {
+      gradient: "from-violet-500/[0.14]",
+      icon: "bg-violet-500/10 text-violet-400 ring-violet-500/20"
+    },
+    sky: {
+      gradient: "from-sky-500/[0.14]",
+      icon: "bg-sky-500/10 text-sky-400 ring-sky-500/20"
+    },
+    emerald: {
+      gradient: "from-emerald-500/[0.14]",
+      icon: "bg-emerald-500/10 text-emerald-400 ring-emerald-500/20"
+    },
+    fuchsia: {
+      gradient: "from-fuchsia-500/[0.14]",
+      icon: "bg-fuchsia-500/10 text-fuchsia-400 ring-fuchsia-500/20"
+    }
+  };
+
+  const style = accents[accent] || accents.violet;
+
+  return (
+    <div className="group relative overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.02] p-5 shadow-2xl shadow-black/40 backdrop-blur-2xl transition-all duration-300 hover:-translate-y-1 hover:border-white/[0.15] hover:shadow-black/60">
+      <div
+        className={`pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b ${style.gradient} to-transparent`}
+      />
+
+      <div className="relative flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+            {label}
+          </p>
+
+          <p className="mt-2 break-words text-lg font-bold leading-tight text-white">
+            {value}
+          </p>
+        </div>
+
+        <IconBox size="lg" className={style.icon}>
+          <Icon size={19} />
+        </IconBox>
+      </div>
+    </div>
+  );
+};
 
 export default ReceivePurchase;

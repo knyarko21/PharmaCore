@@ -1,13 +1,15 @@
 
 const { Op } = require("sequelize");
+const crypto = require("crypto");
 
 const sequelize = require("../config/database");
+
 const {
   Prescription,
   PrescriptionItem,
   Customer,
   User,
-  Medicine
+  Medicine,
 } = require("../models");
 
 // ==========================================
@@ -25,19 +27,19 @@ const prescriptionIncludes = [
   {
     model: User,
     as: "creator",
-    attributes: { exclude: ["password"] }
+    attributes: { exclude: ["password"] },
   },
   {
     model: PrescriptionItem,
     as: "items",
-    include: [{ model: Medicine, as: "medicine" }]
-  }
+    include: [{ model: Medicine, as: "medicine" }],
+  },
 ];
 
 const handlePrescriptionError = (error) => {
   if (error.name === "SequelizeUniqueConstraintError") {
     throw createError(
-      "A prescription with these unique details already exists.",
+      "That prescription number already exists. Please retry.",
       409
     );
   }
@@ -51,20 +53,107 @@ const isValidStatus = (status) =>
   );
 
 // ==========================================
-// Create Prescription
+// Generate a unique prescription number
+// Example: RX-20261017-A3F91C
+// ==========================================
+
+const generatePrescriptionNumber = async (transaction) => {
+  const now = new Date();
+
+  const datePart = [
+    now.getUTCFullYear(),
+    String(now.getUTCMonth() + 1).padStart(2, "0"),
+    String(now.getUTCDate()).padStart(2, "0"),
+  ].join("");
+
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const randomPart = crypto
+      .randomBytes(3)
+      .toString("hex")
+      .toUpperCase();
+
+    const prescriptionNumber = `RX-${datePart}-${randomPart}`;
+
+    const existing = await Prescription.findOne({
+      where: { prescriptionNumber },
+      transaction,
+    });
+
+    if (!existing) {
+      return prescriptionNumber;
+    }
+  }
+
+  throw createError(
+    "Unable to generate a unique prescription number. Please try again.",
+    500
+  );
+};
+
+// ==========================================
+// Generate an internal doctor reference
+//
+// Example: DOC-20261017-A3F91C72
+//
+// IMPORTANT:
+// This is an internal system reference, not
+// a real or verified professional license.
+// ==========================================
+
+const generateDoctorReference = () => {
+  const now = new Date();
+
+  const datePart = [
+    now.getUTCFullYear(),
+    String(now.getUTCMonth() + 1).padStart(2, "0"),
+    String(now.getUTCDate()).padStart(2, "0"),
+  ].join("");
+
+  const randomPart = crypto
+    .randomBytes(4)
+    .toString("hex")
+    .toUpperCase();
+
+  return `DOC-${datePart}-${randomPart}`;
+};
+
+const generateUniqueDoctorReference = async (transaction) => {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const doctorReference = generateDoctorReference();
+
+    const existing = await Prescription.findOne({
+      where: { doctorLicenseNumber: doctorReference },
+      transaction,
+    });
+
+    if (!existing) {
+      return doctorReference;
+    }
+  }
+
+  throw createError(
+    "Unable to generate a unique doctor reference. Please try again.",
+    500
+  );
+};
+
+// ==========================================
+// Create prescription
 // ==========================================
 
 const createPrescription = async (data, userId) => {
   const {
-    prescriptionNumber,
     prescriptionDate,
     doctorName,
-    doctorLicenseNumber,
     diagnosis,
     notes,
     customerId,
-    items
+    items,
   } = data;
+
+  if (!doctorName || !doctorName.trim()) {
+    throw createError("Doctor name is required.", 400);
+  }
 
   if (!Array.isArray(items) || items.length === 0) {
     throw createError(
@@ -87,21 +176,16 @@ const createPrescription = async (data, userId) => {
   try {
     const customer = await Customer.findByPk(customerId, {
       transaction,
-      lock: transaction.LOCK.UPDATE
+      lock: transaction.LOCK.UPDATE,
     });
 
-    if (!customer) throw createError("Customer not found.", 404);
-
-    const existingPrescription = await Prescription.findOne({
-      where: { prescriptionNumber },
-      transaction
-    });
-
-    if (existingPrescription) {
-      throw createError("Prescription number already exists.", 409);
+    if (!customer) {
+      throw createError("Customer not found.", 404);
     }
 
-    const creator = await User.findByPk(userId, { transaction });
+    const creator = await User.findByPk(userId, {
+      transaction,
+    });
 
     if (!creator) {
       throw createError(
@@ -111,9 +195,11 @@ const createPrescription = async (data, userId) => {
     }
 
     const medicines = await Medicine.findAll({
-      where: { id: { [Op.in]: medicineIds } },
+      where: {
+        id: { [Op.in]: medicineIds },
+      },
       transaction,
-      lock: transaction.LOCK.UPDATE
+      lock: transaction.LOCK.UPDATE,
     });
 
     if (medicines.length !== medicineIds.length) {
@@ -123,33 +209,45 @@ const createPrescription = async (data, userId) => {
       );
     }
 
+    // Always generate the prescription number on the backend.
+    // The client cannot choose or override it.
+    const prescriptionNumber =
+      await generatePrescriptionNumber(transaction);
+
+    // Always generate an internal doctor reference on the backend.
+    // Any doctorLicenseNumber sent by the frontend is ignored.
+    const doctorLicenseNumber =
+      await generateUniqueDoctorReference(transaction);
+
     const prescription = await Prescription.create(
       {
         prescriptionNumber,
         prescriptionDate,
-        doctorName,
+        doctorName: doctorName.trim(),
         doctorLicenseNumber,
-        diagnosis,
-        notes,
+        diagnosis: diagnosis || null,
+        notes: notes || null,
         customerId,
         createdBy: userId,
-        status: "active"
+        status: "active",
       },
       { transaction }
     );
 
     const prescriptionItems = items.map((item) => ({
       prescriptionId: prescription.id,
-      medicineId: item.medicineId,
-      dosage: item.dosage,
-      frequency: item.frequency,
-      duration: item.duration,
-      quantity: item.quantity,
+      medicineId: Number(item.medicineId),
+      dosage: item.dosage.trim(),
+      frequency: item.frequency.trim(),
+      duration: item.duration.trim(),
+      quantity: Number(item.quantity),
       dispensedQuantity: 0,
-      instructions: item.instructions
+      instructions: item.instructions || null,
     }));
 
-    await PrescriptionItem.bulkCreate(prescriptionItems, { transaction });
+    await PrescriptionItem.bulkCreate(prescriptionItems, {
+      transaction,
+    });
 
     await transaction.commit();
 
@@ -164,7 +262,7 @@ const createPrescription = async (data, userId) => {
 };
 
 // ==========================================
-// Get All Prescriptions
+// Get all prescriptions
 // ==========================================
 
 const getAllPrescriptions = async (filters = {}) => {
@@ -174,7 +272,7 @@ const getAllPrescriptions = async (filters = {}) => {
     startDate,
     endDate,
     page = 1,
-    limit = 10
+    limit = 10,
   } = filters;
 
   const currentPage = Math.max(1, Number(page) || 1);
@@ -190,8 +288,13 @@ const getAllPrescriptions = async (filters = {}) => {
   if (startDate || endDate) {
     where.prescriptionDate = {};
 
-    if (startDate) where.prescriptionDate[Op.gte] = startDate;
-    if (endDate) where.prescriptionDate[Op.lte] = endDate;
+    if (startDate) {
+      where.prescriptionDate[Op.gte] = startDate;
+    }
+
+    if (endDate) {
+      where.prescriptionDate[Op.lte] = endDate;
+    }
   }
 
   if (search && String(search).trim()) {
@@ -200,7 +303,8 @@ const getAllPrescriptions = async (filters = {}) => {
     where[Op.or] = [
       { prescriptionNumber: { [Op.like]: searchTerm } },
       { doctorName: { [Op.like]: searchTerm } },
-      { diagnosis: { [Op.like]: searchTerm } }
+      { doctorLicenseNumber: { [Op.like]: searchTerm } },
+      { diagnosis: { [Op.like]: searchTerm } },
     ];
   }
 
@@ -212,8 +316,8 @@ const getAllPrescriptions = async (filters = {}) => {
     offset,
     order: [
       ["prescriptionDate", "DESC"],
-      ["id", "DESC"]
-    ]
+      ["id", "DESC"],
+    ],
   });
 
   return {
@@ -222,20 +326,24 @@ const getAllPrescriptions = async (filters = {}) => {
       total: count,
       page: currentPage,
       limit: pageSize,
-      totalPages: Math.ceil(count / pageSize)
-    }
+      totalPages: Math.ceil(count / pageSize),
+    },
   };
 };
 
 // ==========================================
-// Get Prescription Summary
+// Get prescription summary
 // ==========================================
 
 const getPrescriptionSummary = async () => {
   const now = new Date();
 
   const startOfToday = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
+    Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate()
+    )
   );
 
   const startOfTomorrow = new Date(
@@ -257,23 +365,43 @@ const getPrescriptionSummary = async () => {
     dispensed,
     cancelled,
     createdToday,
-    createdThisMonth
+    createdThisMonth,
   ] = await Promise.all([
     Prescription.count(),
-    Prescription.count({ where: { status: "active" } }),
-    Prescription.count({ where: { status: "partially_dispensed" } }),
-    Prescription.count({ where: { status: "dispensed" } }),
-    Prescription.count({ where: { status: "cancelled" } }),
+
     Prescription.count({
-      where: {
-        createdAt: { [Op.gte]: startOfToday, [Op.lt]: startOfTomorrow }
-      }
+      where: { status: "active" },
     }),
+
+    Prescription.count({
+      where: { status: "partially_dispensed" },
+    }),
+
+    Prescription.count({
+      where: { status: "dispensed" },
+    }),
+
+    Prescription.count({
+      where: { status: "cancelled" },
+    }),
+
     Prescription.count({
       where: {
-        createdAt: { [Op.gte]: startOfMonth, [Op.lt]: startOfNextMonth }
-      }
-    })
+        createdAt: {
+          [Op.gte]: startOfToday,
+          [Op.lt]: startOfTomorrow,
+        },
+      },
+    }),
+
+    Prescription.count({
+      where: {
+        createdAt: {
+          [Op.gte]: startOfMonth,
+          [Op.lt]: startOfNextMonth,
+        },
+      },
+    }),
   ]);
 
   return {
@@ -283,17 +411,17 @@ const getPrescriptionSummary = async () => {
     dispensed,
     cancelled,
     createdToday,
-    createdThisMonth
+    createdThisMonth,
   };
 };
 
 // ==========================================
-// Get Prescription By ID
+// Get prescription by ID
 // ==========================================
 
 const getPrescriptionById = async (id) => {
   const prescription = await Prescription.findByPk(id, {
-    include: prescriptionIncludes
+    include: prescriptionIncludes,
   });
 
   if (!prescription) {
@@ -304,7 +432,7 @@ const getPrescriptionById = async (id) => {
 };
 
 // ==========================================
-// Get Prescription Items
+// Get prescription items
 // ==========================================
 
 const getPrescriptionItems = async (prescriptionId) => {
@@ -317,12 +445,12 @@ const getPrescriptionItems = async (prescriptionId) => {
   return PrescriptionItem.findAll({
     where: { prescriptionId },
     include: [{ model: Medicine, as: "medicine" }],
-    order: [["id", "ASC"]]
+    order: [["id", "ASC"]],
   });
 };
 
 // ==========================================
-// Cancel Prescription
+// Cancel prescription
 // ==========================================
 
 const cancelPrescription = async (id) => {
@@ -331,10 +459,12 @@ const cancelPrescription = async (id) => {
   try {
     const prescription = await Prescription.findByPk(id, {
       transaction,
-      lock: transaction.LOCK.UPDATE
+      lock: transaction.LOCK.UPDATE,
     });
 
-    if (!prescription) throw createError("Prescription not found.", 404);
+    if (!prescription) {
+      throw createError("Prescription not found.", 404);
+    }
 
     if (prescription.status === "cancelled") {
       throw createError(
@@ -354,12 +484,15 @@ const cancelPrescription = async (id) => {
     }
 
     if (prescription.status !== "active") {
-      throw createError("Only active prescriptions can be cancelled.", 400);
+      throw createError(
+        "Only active prescriptions can be cancelled.",
+        400
+      );
     }
 
     prescription.status = "cancelled";
-    await prescription.save({ transaction });
 
+    await prescription.save({ transaction });
     await transaction.commit();
 
     return getPrescriptionById(id);
@@ -372,11 +505,15 @@ const cancelPrescription = async (id) => {
   }
 };
 
+// ==========================================
+// Exports
+// ==========================================
+
 module.exports = {
   createPrescription,
   getAllPrescriptions,
   getPrescriptionSummary,
   getPrescriptionById,
   getPrescriptionItems,
-  cancelPrescription
+  cancelPrescription,
 };

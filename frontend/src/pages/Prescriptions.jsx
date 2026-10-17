@@ -168,7 +168,6 @@ const createEmptyForm = () => ({
   prescriptionNumber: "",
   prescriptionDate: new Date().toISOString().split("T")[0],
   doctorName: "",
-  doctorLicenseNumber: "",
   diagnosis: "",
   notes: "",
   customerId: ""
@@ -607,11 +606,6 @@ const Prescriptions = () => {
     setError("");
     setSuccessMessage("");
 
-    if (!formData.prescriptionNumber.trim()) {
-      setError("Prescription number is required.");
-      return;
-    }
-
     if (!formData.prescriptionDate) {
       setError("Prescription date is required.");
       return;
@@ -637,7 +631,6 @@ const Prescriptions = () => {
         !item.medicineId ||
         !item.dosage.trim() ||
         !item.frequency.trim() ||
-        !item.duration.trim() ||
         !Number.isInteger(Number(item.quantity)) ||
         Number(item.quantity) < 1
     );
@@ -667,17 +660,13 @@ const Prescriptions = () => {
 
       const payload = {
         prescriptionNumber:
-          formData.prescriptionNumber.trim(),
+          formData.prescriptionNumber.trim() || undefined,
 
         prescriptionDate:
           formData.prescriptionDate,
 
         doctorName:
           formData.doctorName.trim(),
-
-        doctorLicenseNumber:
-          formData.doctorLicenseNumber.trim() ||
-          undefined,
 
         diagnosis:
           formData.diagnosis.trim() ||
@@ -694,7 +683,7 @@ const Prescriptions = () => {
           medicineId: Number(item.medicineId),
           dosage: item.dosage.trim(),
           frequency: item.frequency.trim(),
-          duration: item.duration.trim(),
+          duration: item.duration.trim() || undefined,
           quantity: Number(item.quantity),
           instructions:
             item.instructions.trim() ||
@@ -1515,19 +1504,20 @@ const Prescriptions = () => {
                     </div>
 
                     <div className="grid min-w-0 gap-4 md:grid-cols-2">
-                      <FormField
-                        label="Prescription Number"
-                        required
-                      >
+                      <FormField label="Prescription Number (Optional)">
                         <input
                           type="text"
                           name="prescriptionNumber"
                           value={formData.prescriptionNumber}
                           onChange={handleFormChange}
-                          placeholder="e.g. RX-2026-001"
+                          placeholder="Leave blank to generate automatically"
                           className={inputClass}
-                          required
                         />
+
+                        <p className="mt-2 text-xs leading-5 text-zinc-500">
+                          PharmaCore will generate a unique prescription number when
+                          you leave this field blank.
+                        </p>
                       </FormField>
 
                       <FormField
@@ -1596,17 +1586,6 @@ const Prescriptions = () => {
                           placeholder="e.g. Dr. Kwame Mensah"
                           className={inputClass}
                           required
-                        />
-                      </FormField>
-
-                      <FormField label="Doctor License Number">
-                        <input
-                          type="text"
-                          name="doctorLicenseNumber"
-                          value={formData.doctorLicenseNumber}
-                          onChange={handleFormChange}
-                          placeholder="e.g. MED-GH-12345"
-                          className={inputClass}
                         />
                       </FormField>
 
@@ -1771,20 +1750,15 @@ const Prescriptions = () => {
                               />
                             </FormField>
 
-                            <FormField label="Duration" required>
+                            <FormField label="Duration">
                               <input
                                 type="text"
                                 value={item.duration}
                                 onChange={(event) =>
-                                  handleItemChange(
-                                    index,
-                                    "duration",
-                                    event.target.value
-                                  )
+                                  handleItemChange(index, "duration", event.target.value)
                                 }
                                 placeholder="e.g. 7 days"
                                 className={inputClass}
-                                required
                               />
                             </FormField>
 
@@ -2011,13 +1985,6 @@ const Prescriptions = () => {
                       <div className="break-words font-semibold text-white">
                         {selectedPrescription.doctorName || "—"}
                       </div>
-
-                      {selectedPrescription.doctorLicenseNumber && (
-                        <div className="mt-2 break-words text-sm text-zinc-400">
-                          License:{" "}
-                          {selectedPrescription.doctorLicenseNumber}
-                        </div>
-                      )}
                     </InfoPanel>
                   </div>
 

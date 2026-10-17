@@ -2,7 +2,7 @@
 const { z } = require("zod");
 
 // ======================================================
-// Reusable: YYYY-MM-DD date
+// REUSABLE: YYYY-MM-DD DATE VALIDATION
 // ======================================================
 
 const purchaseReceiveDateSchema = z
@@ -10,22 +10,43 @@ const purchaseReceiveDateSchema = z
   .trim()
   .refine(
     (value) => {
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        return false;
+      }
 
-      const date = new Date(`${value}T00:00:00`);
+      const date = new Date(`${value}T00:00:00.000Z`);
 
       return (
         !Number.isNaN(date.getTime()) &&
-        date.toISOString().startsWith(value)
+        date.toISOString().slice(0, 10) === value
       );
     },
     {
-      message: "Date must be a valid date in YYYY-MM-DD format."
+      message: "Date must be a valid date in YYYY-MM-DD format.",
     }
   );
 
 // ======================================================
-// Receive Purchase Item
+// BATCH NUMBER VALIDATION
+// A blank batch number is allowed because the service
+// generates one automatically.
+// ======================================================
+
+const purchaseReceiveBatchNumberSchema = z
+  .string()
+  .trim()
+  .max(100, "Batch number cannot exceed 100 characters.")
+  .refine(
+    (value) => value === "" || value.length >= 2,
+    {
+      message: "Batch number must be at least 2 characters long.",
+    }
+  )
+  .optional()
+  .or(z.literal(""));
+
+// ======================================================
+// RECEIVE PURCHASE ITEM
 // ======================================================
 
 const receivePurchaseItemSchema = z
@@ -35,11 +56,7 @@ const receivePurchaseItemSchema = z
       .int("Purchase item ID must be a whole number.")
       .positive("Purchase item ID must be greater than zero."),
 
-    batchNumber: z
-      .string()
-      .trim()
-      .min(2, "Batch number must be at least 2 characters long.")
-      .max(100, "Batch number cannot exceed 100 characters."),
+    batchNumber: purchaseReceiveBatchNumberSchema,
 
     quantity: z.coerce
       .number()
@@ -54,30 +71,37 @@ const receivePurchaseItemSchema = z
 
     manufactureDate: purchaseReceiveDateSchema
       .optional()
-      .or(z.literal(""))
+      .or(z.literal("")),
   })
   .refine(
     (data) => {
-      if (!data.manufactureDate || !data.expiryDate) return true;
+      if (!data.manufactureDate || !data.expiryDate) {
+        return true;
+      }
+
       return data.manufactureDate <= data.expiryDate;
     },
     {
       message: "Manufacture date cannot be later than expiry date.",
-      path: ["manufactureDate"]
+      path: ["manufactureDate"],
     }
   );
 
 // ======================================================
-// Receive Purchase
+// RECEIVE PURCHASE VALIDATION
 // ======================================================
 
 const receivePurchaseSchema = z.object({
   items: z
     .array(receivePurchaseItemSchema)
-    .min(1, "At least one purchase item must be received.")
+    .min(1, "At least one purchase item must be received."),
 });
+
+// ======================================================
+// EXPORTS
+// ======================================================
 
 module.exports = {
   receivePurchaseItemSchema,
-  receivePurchaseSchema
+  receivePurchaseSchema,
 };

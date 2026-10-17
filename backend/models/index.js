@@ -1,22 +1,5 @@
 
-// ======================================================
-// PharmaCore — Model Registry & Associations
-// ======================================================
-//
-// Loads every model, wires up every association, and
-// re-exports them all. Anything imported from this file
-// gets both the model and its relationships ready to use.
-//
-// Import pattern:
-//   const { Sale, SaleItem, Medicine } = require("../models");
-//
-// Association naming convention:
-//   - Parent side uses the plural form    (User.hasMany(Sale, { as: "sales" }))
-//   - Child side uses the singular form   (Sale.belongsTo(User, { as: "creator" }))
-//
-// This keeps include queries explicit:
-//   Sale.findAll({ include: [{ model: User, as: "creator" }] })
-// ======================================================
+const sequelize = require("../config/database");
 
 const User = require("./User");
 const Category = require("./Category");
@@ -34,292 +17,293 @@ const Payment = require("./Payment");
 const AuditLog = require("./AuditLog");
 const Setting = require("./Setting");
 
-// ======================================================
-// User ↔ Setting (1:1)
-// ======================================================
+// ==========================================
+// USER AND SETTINGS ASSOCIATIONS
+// ==========================================
 
 User.hasOne(Setting, {
   foreignKey: "userId",
   as: "settings",
-  onDelete: "CASCADE"
+  onDelete: "CASCADE",
 });
 
 Setting.belongsTo(User, {
   foreignKey: "userId",
-  as: "user"
+  as: "user",
 });
 
-// ======================================================
-// Category ↔ Medicine (1:N)
-// ======================================================
+// ==========================================
+// CATEGORY AND MEDICINE ASSOCIATIONS
+// ==========================================
 
 Category.hasMany(Medicine, {
   foreignKey: "categoryId",
-  as: "medicines"
+  as: "medicines",
 });
 
 Medicine.belongsTo(Category, {
   foreignKey: "categoryId",
-  as: "category"
+  as: "category",
 });
 
-// ======================================================
-// Medicine ↔ Batch (1:N)
-// ======================================================
+// ==========================================
+// MEDICINE AND BATCH ASSOCIATIONS
+// ==========================================
 
 Medicine.hasMany(Batch, {
   foreignKey: "medicineId",
-  as: "batches"
+  as: "batches",
 });
 
 Batch.belongsTo(Medicine, {
   foreignKey: "medicineId",
-  as: "medicine"
+  as: "medicine",
 });
 
-// ======================================================
-// Supplier ↔ Batch (1:N)
-// ======================================================
+// ==========================================
+// SUPPLIER AND BATCH ASSOCIATIONS
+// ==========================================
 
 Supplier.hasMany(Batch, {
   foreignKey: "supplierId",
-  as: "batches"
+  as: "batches",
 });
 
 Batch.belongsTo(Supplier, {
   foreignKey: "supplierId",
-  as: "supplier"
+  as: "supplier",
 });
 
-// ======================================================
-// Supplier ↔ Purchase (1:N)
-// ======================================================
+// ==========================================
+// SUPPLIER AND PURCHASE ASSOCIATIONS
+// ==========================================
 
 Supplier.hasMany(Purchase, {
   foreignKey: "supplierId",
-  as: "purchases"
+  as: "purchases",
 });
 
 Purchase.belongsTo(Supplier, {
   foreignKey: "supplierId",
-  as: "supplier"
+  as: "supplier",
 });
 
-// ======================================================
-// User ↔ Purchase (1:N, via createdBy)
-// ======================================================
+// ==========================================
+// USER AND PURCHASE ASSOCIATIONS
+// ==========================================
 
 User.hasMany(Purchase, {
   foreignKey: "createdBy",
-  as: "purchases"
+  as: "purchases",
 });
 
 Purchase.belongsTo(User, {
   foreignKey: "createdBy",
-  as: "creator"
+  as: "creator",
 });
 
-// ======================================================
-// Purchase ↔ PurchaseItem (1:N)
-// ======================================================
+// ==========================================
+// PURCHASE AND PURCHASE ITEM ASSOCIATIONS
+// ==========================================
 
 Purchase.hasMany(PurchaseItem, {
   foreignKey: "purchaseId",
-  as: "items"
+  as: "items",
 });
 
 PurchaseItem.belongsTo(Purchase, {
   foreignKey: "purchaseId",
-  as: "purchase"
+  as: "purchase",
 });
 
-// ======================================================
-// Medicine ↔ PurchaseItem (1:N)
-// ======================================================
+// ==========================================
+// MEDICINE AND PURCHASE ITEM ASSOCIATIONS
+// ==========================================
 
 Medicine.hasMany(PurchaseItem, {
   foreignKey: "medicineId",
-  as: "purchaseItems"
+  as: "purchaseItems",
 });
 
 PurchaseItem.belongsTo(Medicine, {
   foreignKey: "medicineId",
-  as: "medicine"
+  as: "medicine",
 });
 
-// ======================================================
-// Customer ↔ Prescription (1:N)
-// ======================================================
+// ==========================================
+// CUSTOMER AND PRESCRIPTION ASSOCIATIONS
+// ==========================================
 
 Customer.hasMany(Prescription, {
   foreignKey: "customerId",
-  as: "prescriptions"
+  as: "prescriptions",
 });
 
 Prescription.belongsTo(Customer, {
   foreignKey: "customerId",
-  as: "customer"
+  as: "customer",
 });
 
-// ======================================================
-// User ↔ Prescription (1:N, via createdBy)
-// ======================================================
+// ==========================================
+// USER AND PRESCRIPTION ASSOCIATIONS
+// ==========================================
 
 User.hasMany(Prescription, {
   foreignKey: "createdBy",
-  as: "prescriptions"
+  as: "prescriptions",
 });
 
 Prescription.belongsTo(User, {
   foreignKey: "createdBy",
-  as: "creator"
+  as: "creator",
 });
 
-// ======================================================
-// Prescription ↔ PrescriptionItem (1:N)
-// ======================================================
+// ==========================================
+// PRESCRIPTION AND PRESCRIPTION ITEM ASSOCIATIONS
+// ==========================================
 
 Prescription.hasMany(PrescriptionItem, {
   foreignKey: "prescriptionId",
-  as: "items"
+  as: "items",
 });
 
 PrescriptionItem.belongsTo(Prescription, {
   foreignKey: "prescriptionId",
-  as: "prescription"
+  as: "prescription",
 });
 
-// ======================================================
-// Medicine ↔ PrescriptionItem (1:N)
-// ======================================================
+// ==========================================
+// MEDICINE AND PRESCRIPTION ITEM ASSOCIATIONS
+// ==========================================
 
 Medicine.hasMany(PrescriptionItem, {
   foreignKey: "medicineId",
-  as: "prescriptionItems"
+  as: "prescriptionItems",
 });
 
 PrescriptionItem.belongsTo(Medicine, {
   foreignKey: "medicineId",
-  as: "medicine"
+  as: "medicine",
 });
 
-// ======================================================
-// Customer ↔ Sale (1:N)
-// ======================================================
+// ==========================================
+// CUSTOMER AND SALE ASSOCIATIONS
+// ==========================================
 
 Customer.hasMany(Sale, {
   foreignKey: "customerId",
-  as: "sales"
+  as: "sales",
 });
 
 Sale.belongsTo(Customer, {
   foreignKey: "customerId",
-  as: "customer"
+  as: "customer",
 });
 
-// ======================================================
-// User ↔ Sale (1:N, via createdBy)
-// ======================================================
+// ==========================================
+// USER AND SALE ASSOCIATIONS
+// ==========================================
 
 User.hasMany(Sale, {
   foreignKey: "createdBy",
-  as: "sales"
+  as: "sales",
 });
 
 Sale.belongsTo(User, {
   foreignKey: "createdBy",
-  as: "creator"
+  as: "creator",
 });
 
-// ======================================================
-// Sale ↔ SaleItem (1:N)
-// ======================================================
+// ==========================================
+// SALE AND SALE ITEM ASSOCIATIONS
+// ==========================================
 
 Sale.hasMany(SaleItem, {
   foreignKey: "saleId",
-  as: "items"
+  as: "items",
 });
 
 SaleItem.belongsTo(Sale, {
   foreignKey: "saleId",
-  as: "sale"
+  as: "sale",
 });
 
-// ======================================================
-// Medicine ↔ SaleItem (1:N)
-// ======================================================
+// ==========================================
+// MEDICINE AND SALE ITEM ASSOCIATIONS
+// ==========================================
 
 Medicine.hasMany(SaleItem, {
   foreignKey: "medicineId",
-  as: "saleItems"
+  as: "saleItems",
 });
 
 SaleItem.belongsTo(Medicine, {
   foreignKey: "medicineId",
-  as: "medicine"
+  as: "medicine",
 });
 
-// ======================================================
-// PrescriptionItem ↔ SaleItem (1:N)
-// ======================================================
+// ==========================================
+// PRESCRIPTION ITEM AND SALE ITEM ASSOCIATIONS
+// ==========================================
 
 PrescriptionItem.hasMany(SaleItem, {
   foreignKey: "prescriptionItemId",
-  as: "saleItems"
+  as: "saleItems",
 });
 
 SaleItem.belongsTo(PrescriptionItem, {
   foreignKey: "prescriptionItemId",
-  as: "prescriptionItem"
+  as: "prescriptionItem",
 });
 
-// ======================================================
-// Batch ↔ SaleItem (1:N)
-// ======================================================
+// ==========================================
+// BATCH AND SALE ITEM ASSOCIATIONS
+// ==========================================
 
 Batch.hasMany(SaleItem, {
   foreignKey: "batchId",
-  as: "saleItems"
+  as: "saleItems",
 });
 
 SaleItem.belongsTo(Batch, {
   foreignKey: "batchId",
-  as: "batch"
+  as: "batch",
 });
 
-// ======================================================
-// Sale ↔ Payment (1:N)
-// ======================================================
+// ==========================================
+// SALE AND PAYMENT ASSOCIATIONS
+// ==========================================
 
 Sale.hasMany(Payment, {
   foreignKey: "saleId",
-  as: "payments"
+  as: "payments",
 });
 
 Payment.belongsTo(Sale, {
   foreignKey: "saleId",
-  as: "sale"
+  as: "sale",
 });
 
-// ======================================================
-// User ↔ AuditLog (1:N)
-// ======================================================
+// ==========================================
+// USER AND AUDIT LOG ASSOCIATIONS
+// ==========================================
 
 User.hasMany(AuditLog, {
   foreignKey: "userId",
-  as: "auditLogs"
+  as: "auditLogs",
 });
 
 AuditLog.belongsTo(User, {
   foreignKey: "userId",
-  as: "user"
+  as: "user",
 });
 
-// ======================================================
-// Exports
-// ======================================================
+// ==========================================
+// EXPORT SHARED DATABASE CONNECTION AND MODELS
+// ==========================================
 
 module.exports = {
+  sequelize,
   User,
   Category,
   Medicine,
@@ -334,5 +318,5 @@ module.exports = {
   SaleItem,
   Payment,
   AuditLog,
-  Setting
+  Setting,
 };
