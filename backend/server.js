@@ -10,7 +10,7 @@ require("dotenv").config();
 
 const sequelize = require("./config/database");
 
-// Register models and associations.
+// Register all Sequelize models and their associations.
 require("./models");
 
 // ======================================================
@@ -19,11 +19,11 @@ require("./models");
 
 const {
   errorMiddleware,
-  notFoundMiddleware
+  notFoundMiddleware,
 } = require("./middleware/errorMiddleware");
 
 // ======================================================
-// Routes
+// API Routes
 // ======================================================
 
 const authRoutes = require("./routes/authRoutes");
@@ -49,17 +49,49 @@ const uploadRoutes = require("./routes/uploadRoutes");
 
 const app = express();
 
+app.disable("x-powered-by");
+
 // ======================================================
-// Global Middleware
+// CORS Configuration
 // ======================================================
 
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+const allowedOrigins = (
+  process.env.CORS_ORIGIN ||
+  "http://localhost:5173"
+)
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+app.use(
+  cors({
+    origin(origin, callback) {
+      // Allow requests without an Origin header, such as
+      // health checks and certain server-to-server requests.
+      if (!origin || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(
+        new Error("Origin not allowed by CORS.")
+      );
+    },
+    credentials: true,
+  })
+);
+
+// ======================================================
+// Request Parsing
+// ======================================================
+
+app.use(express.json({ limit: "1mb" }));
+app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 
 // ======================================================
 // Static Uploaded Files
-// Note: Vercel's filesystem is not persistent storage.
+//
+// Local uploads are not persistent on ephemeral hosting.
+// Use persistent object storage for production uploads.
 // ======================================================
 
 app.use(
@@ -74,23 +106,27 @@ app.use(
 app.get("/", (req, res) => {
   res.status(200).json({
     success: true,
-    message: "PharmaCore API is running."
+    message: "PharmaCore API is running.",
   });
 });
 
 // ======================================================
-// Database Connection for Serverless Requests
+// Database Connection
+//
+// Reuse a connection check across requests handled by
+// this Node.js process. Failed checks can be retried.
 // ======================================================
 
 let databaseConnectionPromise = null;
 
 const ensureDatabaseConnection = async () => {
   if (!databaseConnectionPromise) {
-    databaseConnectionPromise = sequelize.authenticate().catch((error) => {
-      // Allow a later request to retry if the connection fails.
-      databaseConnectionPromise = null;
-      throw error;
-    });
+    databaseConnectionPromise = sequelize
+      .authenticate()
+      .catch((error) => {
+        databaseConnectionPromise = null;
+        throw error;
+      });
   }
 
   return databaseConnectionPromise;
@@ -99,16 +135,16 @@ const ensureDatabaseConnection = async () => {
 app.use("/api", async (req, res, next) => {
   try {
     await ensureDatabaseConnection();
-    next();
+    return next();
   } catch (error) {
     console.error(
       "PharmaCore database connection failed:",
       error.message
     );
 
-    res.status(503).json({
+    return res.status(503).json({
       success: false,
-      message: "The database is temporarily unavailable."
+      message: "The database is temporarily unavailable.",
     });
   }
 });
@@ -142,10 +178,11 @@ app.use(notFoundMiddleware);
 app.use(errorMiddleware);
 
 // ======================================================
-// Local Development Server
+// Local and Render Server Startup
 //
-// Vercel imports the Express app instead of relying on
-// this local startup block.
+// Render starts this file through "npm start".
+// Vercel can import the Express app without running
+// this startup block.
 // ======================================================
 
 if (require.main === module) {
@@ -159,15 +196,43 @@ if (require.main === module) {
         "Database connection established successfully."
       );
 
-      // Local development only.
-      // Do not automatically synchronize production tables.
+      // --------------------------------------------------
+      // Controlled Production Schema Initialization
+      //
+      // Enable RUN_SCHEMA_SYNC=true only for a deliberate,
+      // one-time initialization of missing tables.
+      //
+      // Plain sync() does not intentionally drop existing
+      // tables or alter existing table definitions.
+      // --------------------------------------------------
+
+      if (process.env.RUN_SCHEMA_SYNC === "true") {
+        console.warn(
+          "RUN_SCHEMA_SYNC is enabled. Initializing missing tables..."
+        );
+
+        await sequelize.sync();
+
+        console.log(
+          "Production schema initialization completed successfully."
+        );
+      }
+
+      // --------------------------------------------------
+      // Local Development Synchronization
+      // --------------------------------------------------
+
       if (process.env.NODE_ENV !== "production") {
         await sequelize.sync();
 
         console.log(
-          "Database models synchronized successfully."
+          "Development database models synchronized successfully."
         );
       }
+
+      // --------------------------------------------------
+      // Start HTTP Server
+      // --------------------------------------------------
 
       app.listen(PORT, () => {
         console.log(
@@ -180,6 +245,7 @@ if (require.main === module) {
         error.message
       );
 
+      // Do not run with an uninitialized database.
       process.exitCode = 1;
     }
   };
@@ -187,5 +253,8 @@ if (require.main === module) {
   startServer();
 }
 
-// Export the Express application for Vercel.
+// ======================================================
+// Export Express Application
+// ======================================================
+
 module.exports = app;
