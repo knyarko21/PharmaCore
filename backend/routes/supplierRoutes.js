@@ -21,56 +21,67 @@ const {
 const router = express.Router();
 
 // ======================================================
-// Middleware shortcuts
+// Role Permissions
 // ======================================================
 
-const supplierRoles = ["admin", "pharmacist", "inventory_manager"];
+// All operational roles can view suppliers.
+const supplierReadRoles = [
+  "admin",
+  "pharmacist",
+  "cashier",
+  "inventory_manager"
+];
+
+// Only authorized roles can modify supplier records.
+const supplierWriteRoles = [
+  "admin",
+  "pharmacist",
+  "inventory_manager"
+];
 
 // ======================================================
-// Routes
-// ======================================================
-//
-// GET    /api/suppliers      list all suppliers
-// GET    /api/suppliers/:id  fetch one supplier
-// POST   /api/suppliers      create a supplier
-// PUT    /api/suppliers/:id  update a supplier
-// DELETE /api/suppliers/:id  deactivate a supplier
+// Supplier Routes
 // ======================================================
 
+// GET /api/suppliers
 router.get(
   "/",
   authenticate,
-  authorize(...supplierRoles),
+  authorize(...supplierReadRoles),
   getAllSuppliers
 );
 
+// GET /api/suppliers/:id
 router.get(
   "/:id",
   authenticate,
-  authorize(...supplierRoles),
+  authorize(...supplierReadRoles),
   getSupplierById
 );
 
+// POST /api/suppliers
 router.post(
   "/",
   authenticate,
-  authorize(...supplierRoles),
+  authorize(...supplierWriteRoles),
   validate(createSupplierSchema),
   createSupplier
 );
 
+// PUT /api/suppliers/:id
 router.put(
   "/:id",
   authenticate,
-  authorize(...supplierRoles),
+  authorize(...supplierWriteRoles),
   validate(updateSupplierSchema),
   updateSupplier
 );
 
+// DELETE /api/suppliers/:id
 router.delete(
   "/:id",
   authenticate,
-  authorize(...supplierRoles),
+  authorize(...supplierWriteRoles),
   deactivateSupplier
 );
 

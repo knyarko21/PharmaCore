@@ -21,67 +21,74 @@ const {
 const router = express.Router();
 
 // ======================================================
-// Middleware shortcuts
+// Role Permissions
 // ======================================================
 
-const prescriptionRoles = ["admin", "pharmacist"];
+// Roles allowed to view prescription information.
+// Cashier access should be limited to information needed
+// for legitimate dispensing and customer service.
+const prescriptionReadRoles = [
+  "admin",
+  "pharmacist",
+  "cashier"
+];
+
+// Only admins and pharmacists can create or cancel prescriptions.
+const prescriptionWriteRoles = [
+  "admin",
+  "pharmacist"
+];
 
 // ======================================================
-// Routes
-// ======================================================
-//
-// GET    /api/prescriptions              list all prescriptions
-// GET    /api/prescriptions/summary      counts by status
-// GET    /api/prescriptions/:id/items    items for one prescription
-// GET    /api/prescriptions/:id          fetch one prescription
-// POST   /api/prescriptions              create a prescription
-// DELETE /api/prescriptions/:id          cancel a prescription
-//
-// IMPORTANT: /summary and /:id/items must be declared
-// BEFORE /:id — otherwise Express treats "summary" and
-// "items" as an ID and the wrong handler fires.
+// Prescription Routes
 // ======================================================
 
+// GET /api/prescriptions/summary
 router.get(
   "/summary",
   authenticate,
-  authorize(...prescriptionRoles),
+  authorize(...prescriptionReadRoles),
   getPrescriptionSummary
 );
 
+// GET /api/prescriptions
 router.get(
   "/",
   authenticate,
-  authorize(...prescriptionRoles),
+  authorize(...prescriptionReadRoles),
   getAllPrescriptions
 );
 
+// GET /api/prescriptions/:id/items
 router.get(
   "/:id/items",
   authenticate,
-  authorize(...prescriptionRoles),
+  authorize(...prescriptionReadRoles),
   getPrescriptionItems
 );
 
+// GET /api/prescriptions/:id
 router.get(
   "/:id",
   authenticate,
-  authorize(...prescriptionRoles),
+  authorize(...prescriptionReadRoles),
   getPrescriptionById
 );
 
+// POST /api/prescriptions
 router.post(
   "/",
   authenticate,
-  authorize(...prescriptionRoles),
+  authorize(...prescriptionWriteRoles),
   validate(createPrescriptionSchema),
   createPrescription
 );
 
+// DELETE /api/prescriptions/:id
 router.delete(
   "/:id",
   authenticate,
-  authorize(...prescriptionRoles),
+  authorize(...prescriptionWriteRoles),
   cancelPrescription
 );
 

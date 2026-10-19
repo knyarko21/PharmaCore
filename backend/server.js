@@ -10,16 +10,16 @@ require("dotenv").config();
 
 const sequelize = require("./config/database");
 
-// Register all Sequelize models and their associations.
+// Register all Sequelize models and associations.
 require("./models");
 
 // ======================================================
-// Error Middleware
+// Middleware
 // ======================================================
 
 const {
   errorMiddleware,
-  notFoundMiddleware,
+  notFoundMiddleware
 } = require("./middleware/errorMiddleware");
 
 // ======================================================
@@ -27,24 +27,25 @@ const {
 // ======================================================
 
 const authRoutes = require("./routes/authRoutes");
-const purchaseRoutes = require("./routes/purchaseRoutes");
-const settingsRoutes = require("./routes/settingsRoutes");
+const userRoutes = require("./routes/userRoutes");
 const dashboardRoutes = require("./routes/dashboardRoutes");
 const medicineRoutes = require("./routes/medicineRoutes");
-const inventoryRoutes = require("./routes/inventoryRoutes");
+const categoryRoutes = require("./routes/categoryRoutes");
+const batchRoutes = require("./routes/batchRoutes");
+const supplierRoutes = require("./routes/supplierRoutes");
+const purchaseRoutes = require("./routes/purchaseRoutes");
 const customerRoutes = require("./routes/customerRoutes");
 const prescriptionRoutes = require("./routes/prescriptionRoutes");
 const saleRoutes = require("./routes/saleRoutes");
-const supplierRoutes = require("./routes/supplierRoutes");
-const categoryRoutes = require("./routes/categoryRoutes");
-const batchRoutes = require("./routes/batchRoutes");
-const auditLogRoutes = require("./routes/auditLogRoutes");
-const analyticsRoutes = require("./routes/analyticsRoutes");
+const inventoryRoutes = require("./routes/inventoryRoutes");
 const inventoryAlertRoutes = require("./routes/inventoryAlertRoutes");
+const analyticsRoutes = require("./routes/analyticsRoutes");
+const auditLogRoutes = require("./routes/auditLogRoutes");
+const settingsRoutes = require("./routes/settingsRoutes");
 const uploadRoutes = require("./routes/uploadRoutes");
 
 // ======================================================
-// Initialize Express
+// Application
 // ======================================================
 
 const app = express();
@@ -56,27 +57,30 @@ app.disable("x-powered-by");
 // ======================================================
 
 const allowedOrigins = (
-  process.env.CORS_ORIGIN ||
-  "http://localhost:5173"
+  process.env.CORS_ORIGIN || "http://localhost:5173"
 )
   .split(",")
-  .map((origin) => origin.trim())
+  .map((origin) => origin.trim().replace(/\/+$/, ""))
   .filter(Boolean);
 
 app.use(
   cors({
     origin(origin, callback) {
       // Allow requests without an Origin header, such as
-      // health checks and certain server-to-server requests.
-      if (!origin || allowedOrigins.includes(origin)) {
+      // health checks and server-to-server requests.
+      if (!origin) {
         return callback(null, true);
       }
 
-      return callback(
-        new Error("Origin not allowed by CORS.")
-      );
+      const normalizedOrigin = origin.replace(/\/+$/, "");
+
+      if (allowedOrigins.includes(normalizedOrigin)) {
+        return callback(null, true);
+      }
+
+      return callback(new Error("Origin not allowed by CORS."));
     },
-    credentials: true,
+    credentials: true
   })
 );
 
@@ -85,13 +89,20 @@ app.use(
 // ======================================================
 
 app.use(express.json({ limit: "1mb" }));
-app.use(express.urlencoded({ extended: true, limit: "1mb" }));
+
+app.use(
+  express.urlencoded({
+    extended: true,
+    limit: "1mb"
+  })
+);
 
 // ======================================================
-// Static Uploaded Files
+// Static Uploads
 //
-// Local uploads are not persistent on ephemeral hosting.
-// Use persistent object storage for production uploads.
+// Local filesystem uploads may not persist on Render's
+// ephemeral filesystem. Use persistent object storage
+// for files that must survive deployments or restarts.
 // ======================================================
 
 app.use(
@@ -106,15 +117,12 @@ app.use(
 app.get("/", (req, res) => {
   res.status(200).json({
     success: true,
-    message: "PharmaCore API is running.",
+    message: "PharmaCore API is running."
   });
 });
 
 // ======================================================
-// Database Connection
-//
-// Reuse a connection check across requests handled by
-// this Node.js process. Failed checks can be retried.
+// Database Connection Management
 // ======================================================
 
 let databaseConnectionPromise = null;
@@ -132,6 +140,8 @@ const ensureDatabaseConnection = async () => {
   return databaseConnectionPromise;
 };
 
+// Ensure the database is reachable before processing API
+// requests. A failed connection can be retried later.
 app.use("/api", async (req, res, next) => {
   try {
     await ensureDatabaseConnection();
@@ -144,16 +154,20 @@ app.use("/api", async (req, res, next) => {
 
     return res.status(503).json({
       success: false,
-      message: "The database is temporarily unavailable.",
+      message: "The database is temporarily unavailable."
     });
   }
 });
 
 // ======================================================
-// API Routes
+// API Route Registration
 // ======================================================
 
+// Authentication and account management
 app.use("/api/auth", authRoutes);
+app.use("/api/users", userRoutes);
+
+// Dashboard and core pharmacy operations
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/medicines", medicineRoutes);
 app.use("/api/categories", categoryRoutes);
@@ -163,26 +177,32 @@ app.use("/api/purchases", purchaseRoutes);
 app.use("/api/customers", customerRoutes);
 app.use("/api/prescriptions", prescriptionRoutes);
 app.use("/api/sales", saleRoutes);
+
+// Inventory
 app.use("/api/inventory", inventoryRoutes);
 app.use("/api/inventory", inventoryAlertRoutes);
+
+// Reporting and administration
 app.use("/api/analytics", analyticsRoutes);
 app.use("/api/audit-logs", auditLogRoutes);
 app.use("/api/settings", settingsRoutes);
+
+// Upload management
 app.use("/api/uploads", uploadRoutes);
 
 // ======================================================
-// 404 and Error Handling
+// 404 and Central Error Handling
 // ======================================================
 
 app.use(notFoundMiddleware);
 app.use(errorMiddleware);
 
 // ======================================================
-// Local and Render Server Startup
+// Server Startup
 //
-// Render starts this file through "npm start".
-// Vercel can import the Express app without running
-// this startup block.
+// Render starts the server through the package start
+// script. Vercel can import the Express app without
+// executing this local-server startup block.
 // ======================================================
 
 if (require.main === module) {
@@ -190,23 +210,22 @@ if (require.main === module) {
 
   const startServer = async () => {
     try {
-      await sequelize.authenticate();
+      await ensureDatabaseConnection();
 
       console.log(
         "Database connection established successfully."
       );
 
-      // --------------------------------------------------
-      // Controlled Production Schema Initialization
-      //
-      // Enable RUN_SCHEMA_SYNC=true only for a deliberate,
-      // one-time initialization of missing tables.
-      //
-      // Plain sync() does not intentionally drop existing
-      // tables or alter existing table definitions.
-      // --------------------------------------------------
-
+      // Optional, deliberate schema initialization.
+      // Never enable this casually in production.
       if (process.env.RUN_SCHEMA_SYNC === "true") {
+        if (process.env.NODE_ENV === "production") {
+          throw new Error(
+            "RUN_SCHEMA_SYNC must not be enabled in production. " +
+            "Use reviewed database migrations instead."
+          );
+        }
+
         console.warn(
           "RUN_SCHEMA_SYNC is enabled. Initializing missing tables..."
         );
@@ -214,14 +233,11 @@ if (require.main === module) {
         await sequelize.sync();
 
         console.log(
-          "Production schema initialization completed successfully."
+          "Database schema initialization completed."
         );
       }
 
-      // --------------------------------------------------
-      // Local Development Synchronization
-      // --------------------------------------------------
-
+      // Synchronize models only in local development.
       if (process.env.NODE_ENV !== "production") {
         await sequelize.sync();
 
@@ -230,22 +246,51 @@ if (require.main === module) {
         );
       }
 
-      // --------------------------------------------------
-      // Start HTTP Server
-      // --------------------------------------------------
-
-      app.listen(PORT, () => {
+      const server = app.listen(PORT, () => {
         console.log(
           `PharmaCore API running on port ${PORT}.`
         );
       });
+
+      // Graceful shutdown for local and hosted environments.
+      const shutdown = (signal) => {
+        console.log(`${signal} received. Shutting down...`);
+
+        server.close(async (serverError) => {
+          try {
+            await sequelize.close();
+
+            if (serverError) {
+              console.error(
+                "HTTP server shutdown error:",
+                serverError.message
+              );
+
+              process.exitCode = 1;
+            } else {
+              console.log(
+                "PharmaCore server shut down successfully."
+              );
+            }
+          } catch (databaseError) {
+            console.error(
+              "Database shutdown error:",
+              databaseError.message
+            );
+
+            process.exitCode = 1;
+          }
+        });
+      };
+
+      process.once("SIGTERM", () => shutdown("SIGTERM"));
+      process.once("SIGINT", () => shutdown("SIGINT"));
     } catch (error) {
       console.error(
         "Failed to start PharmaCore API:",
         error.message
       );
 
-      // Do not run with an uninitialized database.
       process.exitCode = 1;
     }
   };
@@ -254,7 +299,7 @@ if (require.main === module) {
 }
 
 // ======================================================
-// Export Express Application
+// Export Application
 // ======================================================
 
 module.exports = app;

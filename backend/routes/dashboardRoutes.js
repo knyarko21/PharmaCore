@@ -11,16 +11,21 @@ const { authorize } = require("../middleware/roleMiddleware");
 const router = express.Router();
 
 // ======================================================
-// Routes
+// Dashboard Routes
 // ======================================================
-//
-// GET /api/dashboard/overview  aggregated stats for the dashboard
-// ======================================================
+
+// GET /api/dashboard/overview
+// All operational roles can view the dashboard overview.
 
 router.get(
   "/overview",
   authenticate,
-  authorize("admin", "pharmacist", "inventory_manager"),
+  authorize(
+    "admin",
+    "pharmacist",
+    "cashier",
+    "inventory_manager"
+  ),
   getDashboardOverview
 );
 

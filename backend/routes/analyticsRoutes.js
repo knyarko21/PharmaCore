@@ -13,25 +13,23 @@ const { authorize } = require("../middleware/roleMiddleware");
 const router = express.Router();
 
 // ======================================================
-// Middleware shortcuts
+// Role Permissions
 // ======================================================
 
-const analyticsRoles = ["admin", "pharmacist", "inventory_manager"];
+// All operational roles can view analytics.
+// Review returned financial data before production use.
+const analyticsRoles = [
+  "admin",
+  "pharmacist",
+  "cashier",
+  "inventory_manager"
+];
 
 // ======================================================
-// Routes
-// ======================================================
-//
-// All three endpoints are mounted under /api/analytics/*
-// so the frontend Analytics.jsx page — which calls
-// /api/analytics/sales, /api/analytics/trends and
-// /api/analytics/top-selling — works without changes.
-//
-// GET /api/analytics/sales        today + month summary
-// GET /api/analytics/trends       30-day daily breakdown
-// GET /api/analytics/top-selling  top medicines (today + month)
+// Analytics Routes
 // ======================================================
 
+// GET /api/analytics/sales
 router.get(
   "/sales",
   authenticate,
@@ -39,6 +37,7 @@ router.get(
   getSalesAnalytics
 );
 
+// GET /api/analytics/trends
 router.get(
   "/trends",
   authenticate,
@@ -46,6 +45,7 @@ router.get(
   getSalesTrends
 );
 
+// GET /api/analytics/top-selling
 router.get(
   "/top-selling",
   authenticate,

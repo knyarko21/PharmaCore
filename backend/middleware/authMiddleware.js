@@ -1,6 +1,5 @@
 
 const jwt = require("jsonwebtoken");
-
 const { User } = require("../models");
 
 // ======================================================
@@ -23,27 +22,10 @@ const sendError = (res, status, message) =>
 // ======================================================
 // Authenticate User
 // ======================================================
-//
-// Verifies the JWT in the Authorization header, loads the
-// matching user, checks that the account is active, and
-// attaches a safe user object to req.user.
-//
-// Attaches on success:
-//   req.user = { id, firstName, lastName, email, role, isActive }
-//
-// Failure statuses:
-//   500 - JWT_SECRET not configured
-//   401 - Missing / malformed / invalid / expired token
-//   401 - User account not found
-//   403 - User account deactivated
-// ======================================================
 
 const authenticate = async (req, res, next) => {
   try {
-    // ----------------------------------------------
-    // Configuration check
-    // ----------------------------------------------
-
+    // 1. Verify authentication configuration
     if (!process.env.JWT_SECRET) {
       console.error("JWT_SECRET is not configured.");
 
@@ -54,21 +36,23 @@ const authenticate = async (req, res, next) => {
       );
     }
 
-    // ----------------------------------------------
-    // Authorization header
-    // ----------------------------------------------
-
+    // 2. Read Authorization header
     const authHeader = req.headers.authorization;
 
     if (!authHeader) {
-      return sendError(res, 401, "Authentication required.");
+      return sendError(
+        res,
+        401,
+        "Authentication required."
+      );
     }
 
     const parts = authHeader.trim().split(/\s+/);
 
     if (
       parts.length !== 2 ||
-      parts[0].toLowerCase() !== "bearer"
+      parts[0].toLowerCase() !== "bearer" ||
+      !parts[1]
     ) {
       return sendError(
         res,
@@ -77,21 +61,11 @@ const authenticate = async (req, res, next) => {
       );
     }
 
-    const token = parts[1];
-
-    if (!token) {
-      return sendError(
-        res,
-        401,
-        "Authentication token is missing."
-      );
-    }
-
-    // ----------------------------------------------
-    // Verify token
-    // ----------------------------------------------
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    // 3. Verify JWT
+    const decoded = jwt.verify(
+      parts[1],
+      process.env.JWT_SECRET
+    );
 
     if (
       !decoded ||
@@ -105,16 +79,19 @@ const authenticate = async (req, res, next) => {
       );
     }
 
-    // ----------------------------------------------
-    // Load user
-    // ----------------------------------------------
-
+    // 4. Always load the current database user.
+    // Never rely on a potentially outdated JWT role.
     const user = await User.findByPk(Number(decoded.id));
 
     if (!user) {
-      return sendError(res, 401, "User account not found.");
+      return sendError(
+        res,
+        401,
+        "User account not found."
+      );
     }
 
+    // 5. Check account activation
     if (!user.isActive) {
       return sendError(
         res,
@@ -123,28 +100,41 @@ const authenticate = async (req, res, next) => {
       );
     }
 
-    // ----------------------------------------------
-    // Attach safe user info
-    // ----------------------------------------------
+    // 6. Check administrator approval
+    if (user.approvalStatus !== "approved") {
+      if (user.approvalStatus === "rejected") {
+        return sendError(
+          res,
+          403,
+          "Your registration was not approved. Please contact the administrator."
+        );
+      }
 
+      return sendError(
+        res,
+        403,
+        "Your account is awaiting administrator approval."
+      );
+    }
+
+    // 7. Attach current, safe database user information
     req.user = {
       id: user.id,
       firstName: user.firstName,
       lastName: user.lastName,
       email: user.email,
       role: user.role,
-      isActive: user.isActive
+      isActive: user.isActive,
+      approvalStatus: user.approvalStatus
     };
 
     return next();
   } catch (error) {
-    logError("Authentication error:", error);
-
     if (error.name === "TokenExpiredError") {
       return sendError(
         res,
         401,
-        "Authentication token has expired."
+        "Your session has expired. Please sign in again."
       );
     }
 
@@ -156,13 +146,15 @@ const authenticate = async (req, res, next) => {
       );
     }
 
-    return sendError(res, 500, "Unable to authenticate user.");
+    logError("Authentication error:", error);
+
+    return sendError(
+      res,
+      500,
+      "Unable to authenticate user."
+    );
   }
 };
-
-// ======================================================
-// Export
-// ======================================================
 
 module.exports = {
   authenticate

@@ -21,28 +21,28 @@ const {
 const router = express.Router();
 
 // ======================================================
-// Middleware shortcuts
+// Role Permissions
 // ======================================================
 
-const inventoryReadRoles = ["admin", "pharmacist", "inventory_manager"];
+// All operational roles can view inventory information.
+const inventoryReadRoles = [
+  "admin",
+  "pharmacist",
+  "cashier",
+  "inventory_manager"
+];
 
-const inventoryAdjustRoles = ["admin", "inventory_manager"];
+// Only authorized stock managers can manually adjust stock.
+const inventoryAdjustRoles = [
+  "admin",
+  "inventory_manager"
+];
 
 // ======================================================
-// Routes
-// ======================================================
-//
-// GET  /api/inventory/summary                 summary + totals
-// GET  /api/inventory/low-stock               low-stock medicines
-// GET  /api/inventory/expiring?days=90        expiring batches
-// GET  /api/inventory/expired                 expired batches
-// GET  /api/inventory/medicine/:medicineId    stock for a medicine
-// POST /api/inventory/adjust                  manual stock adjustment
-//
-// NOTE: Static segments (/summary, /low-stock, ...) are declared
-// before dynamic segments so they always match first.
+// Inventory Routes
 // ======================================================
 
+// GET /api/inventory/summary
 router.get(
   "/summary",
   authenticate,
@@ -50,6 +50,7 @@ router.get(
   getInventorySummary
 );
 
+// GET /api/inventory/low-stock
 router.get(
   "/low-stock",
   authenticate,
@@ -57,6 +58,7 @@ router.get(
   getLowStockMedicines
 );
 
+// GET /api/inventory/expiring?days=90
 router.get(
   "/expiring",
   authenticate,
@@ -64,6 +66,7 @@ router.get(
   getExpiringBatches
 );
 
+// GET /api/inventory/expired
 router.get(
   "/expired",
   authenticate,
@@ -71,6 +74,7 @@ router.get(
   getExpiredBatches
 );
 
+// GET /api/inventory/medicine/:medicineId
 router.get(
   "/medicine/:medicineId",
   authenticate,
@@ -78,6 +82,7 @@ router.get(
   getStockByMedicine
 );
 
+// POST /api/inventory/adjust
 router.post(
   "/adjust",
   authenticate,

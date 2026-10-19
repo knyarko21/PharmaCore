@@ -6,12 +6,9 @@ const sequelize = require("../config/database");
 // User Model
 // ======================================================
 //
-// Default scope excludes the password field. Use the
-// "withPassword" scope when you explicitly need to read
-// or compare the hash (e.g. login, password change).
-//
-//   User.findOne(...)                          // no password
-//   User.scope("withPassword").findOne(...)    // includes password
+// Default scope excludes the password field.
+// Use the "withPassword" scope when authentication
+// needs to compare a submitted password with its hash.
 // ======================================================
 
 const User = sequelize.define(
@@ -62,6 +59,17 @@ const User = sequelize.define(
       type: DataTypes.BOOLEAN,
       allowNull: false,
       defaultValue: true
+    },
+
+    // New accounts must be approved by an administrator.
+    approvalStatus: {
+      type: DataTypes.ENUM(
+        "pending",
+        "approved",
+        "rejected"
+      ),
+      allowNull: false,
+      defaultValue: "pending"
     }
   },
   {

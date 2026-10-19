@@ -15,8 +15,12 @@ const PASSWORD_MIN_LENGTH = 8;
 const PASSWORD_MAX_LENGTH = 72;
 const BCRYPT_ROUNDS = 12;
 
+// Public users may register, but cannot choose their own role.
+const PUBLIC_REGISTRATION_ROLE = "cashier";
+const PUBLIC_REGISTRATION_STATUS = "approved";
+
 // ======================================================
-// Logging Helper
+// Logging and HTTP Responses
 // ======================================================
 
 const logError = (context, error) => {
@@ -26,14 +30,10 @@ const logError = (context, error) => {
   console.error("=================================");
 };
 
-// ======================================================
-// HTTP Error Response
-// ======================================================
-
 const sendError = (res, status, message) =>
   res.status(status).json({
     success: false,
-    message
+    message,
   });
 
 // ======================================================
@@ -42,7 +42,7 @@ const sendError = (res, status, message) =>
 
 const getRequestMeta = (req) => ({
   ipAddress: req.ip,
-  userAgent: req.get("user-agent")
+  userAgent: req.get("user-agent"),
 });
 
 // ======================================================
@@ -56,11 +56,12 @@ const toSafeUser = (user) => ({
   lastName: user.lastName,
   email: user.email,
   role: user.role,
-  isActive: user.isActive
+  isActive: user.isActive,
+  approvalStatus: user.approvalStatus,
 });
 
 // ======================================================
-// Generate JWT
+// JWT Generation
 // ======================================================
 
 const generateToken = (user) => {
@@ -71,17 +72,18 @@ const generateToken = (user) => {
   return jwt.sign(
     {
       id: user.id,
-      role: user.role
+      role: user.role,
     },
     process.env.JWT_SECRET,
     {
-      expiresIn: "1d"
+      expiresIn: "1d",
     }
   );
 };
 
 // ======================================================
 // Audit Logging
+// Audit failures must not expose sensitive information.
 // ======================================================
 
 const writeAuditLog = async ({
@@ -90,7 +92,7 @@ const writeAuditLog = async ({
   action,
   description,
   entityType = "User",
-  entityId
+  entityId,
 }) => {
   try {
     await createAuditLog({
@@ -100,11 +102,9 @@ const writeAuditLog = async ({
       description,
       entityType,
       entityId,
-      ...getRequestMeta(req)
+      ...getRequestMeta(req),
     });
   } catch (auditError) {
-    // An audit logging failure should not expose internal details
-    // or unnecessarily prevent the authentication operation.
     console.error(
       `Auth ${action} audit error:`,
       auditError.message
@@ -113,26 +113,18 @@ const writeAuditLog = async ({
 };
 
 // ======================================================
-// Normalize Email
+// Validation Helpers
 // ======================================================
 
 const normalizeEmail = (email) =>
   email.trim().toLowerCase();
 
-// ======================================================
-// Validate Email
-// ======================================================
-
 const isValidEmail = (email) =>
   typeof email === "string" &&
   EMAIL_PATTERN.test(email);
 
-// ======================================================
-// Validate Password
-// ======================================================
-
 const validatePassword = (password) => {
-  if (typeof password !== "string") {
+  if (typeof password !== "string" || !password) {
     return "Password is required.";
   }
 
@@ -151,8 +143,11 @@ const validatePassword = (password) => {
 // Register User
 // POST /api/auth/register
 //
-// Public registration creates cashier accounts only.
-// The role supplied by the client is never trusted.
+// Public registration:
+// - Automatically approves new accounts.
+// - Assigns the cashier role only.
+// - Never accepts a role from the client.
+// - Does not automatically issue an authentication token.
 // ======================================================
 
 const register = async (req, res) => {
@@ -161,7 +156,7 @@ const register = async (req, res) => {
       firstName,
       lastName,
       email,
-      password
+      password,
     } = req.body || {};
 
     // Validate required fields.
@@ -186,19 +181,19 @@ const register = async (req, res) => {
     const normalizedLastName = lastName.trim();
     const normalizedEmail = normalizeEmail(email);
 
-    // Validate name lengths.
+    // Validate names.
     if (
-      normalizedFirstName.length > 100 ||
-      normalizedLastName.length > 100
+      normalizedFirstName.length > 50 ||
+      normalizedLastName.length > 50
     ) {
       return sendError(
         res,
         400,
-        "First name and last name must not exceed 100 characters."
+        "First name and last name must not exceed 50 characters."
       );
     }
 
-    // Validate email format.
+    // Validate email.
     if (!isValidEmail(normalizedEmail)) {
       return sendError(
         res,
@@ -214,11 +209,11 @@ const register = async (req, res) => {
       return sendError(res, 400, passwordError);
     }
 
-    // Check for duplicate email.
+    // Check whether the email is already registered.
     const existingUser = await User.findOne({
       where: {
-        email: normalizedEmail
-      }
+        email: normalizedEmail,
+      },
     });
 
     if (existingUser) {
@@ -229,41 +224,45 @@ const register = async (req, res) => {
       );
     }
 
-    // Hash the password before storing it.
+    // Hash the password before saving it.
     const hashedPassword = await bcrypt.hash(
       password,
       BCRYPT_ROUNDS
     );
 
-    // IMPORTANT:
-    // Never use req.body.role for public registration.
+    // Never trust client-supplied role or approval status.
+    // Every public registration receives the same limited role.
     const user = await User.create({
       firstName: normalizedFirstName,
       lastName: normalizedLastName,
       email: normalizedEmail,
       password: hashedPassword,
-      role: "cashier"
+      role: PUBLIC_REGISTRATION_ROLE,
+      isActive: true,
+      approvalStatus: PUBLIC_REGISTRATION_STATUS,
     });
 
-    // Record account creation.
+    // Record the registration in the audit log.
     await writeAuditLog({
       req,
       userId: user.id,
       action: "create",
       description:
-        `User account created for ${user.firstName} ${user.lastName}.`,
-      entityId: user.id
+        `Public account registered and automatically approved for ${user.firstName} ${user.lastName}.`,
+      entityId: user.id,
     });
 
+    // Return safe user information, never the password hash.
+    // The user must sign in to obtain an authentication token.
     return res.status(201).json({
       success: true,
-      message: "Account created successfully. You can now sign in.",
-      user: toSafeUser(user)
+      message:
+        "Registration successful. Your account is ready. Please sign in to continue.",
+      user: toSafeUser(user),
     });
   } catch (error) {
     logError("Registration error:", error);
 
-    // Handle duplicate email conflicts.
     if (error.name === "SequelizeUniqueConstraintError") {
       return sendError(
         res,
@@ -283,6 +282,8 @@ const register = async (req, res) => {
 // ======================================================
 // Login User
 // POST /api/auth/login
+//
+// Only active and approved users can sign in.
 // ======================================================
 
 const login = async (req, res) => {
@@ -312,11 +313,11 @@ const login = async (req, res) => {
       );
     }
 
-    // The withPassword scope must include the password field.
+    // Explicitly include the password for comparison.
     const user = await User.scope("withPassword").findOne({
       where: {
-        email: normalizedEmail
-      }
+        email: normalizedEmail,
+      },
     });
 
     if (!user) {
@@ -327,14 +328,7 @@ const login = async (req, res) => {
       );
     }
 
-    if (!user.isActive) {
-      return sendError(
-        res,
-        403,
-        "Your account has been deactivated."
-      );
-    }
-
+    // Verify credentials before disclosing account status.
     const passwordMatch = await bcrypt.compare(
       password,
       user.password
@@ -348,6 +342,43 @@ const login = async (req, res) => {
       );
     }
 
+    if (!user.isActive) {
+      return sendError(
+        res,
+        403,
+        "Your account has been deactivated. Please contact the administrator."
+      );
+    }
+
+    if (user.approvalStatus === "pending") {
+      return sendError(
+        res,
+        403,
+        "Your registration is awaiting administrator approval."
+      );
+    }
+
+    if (user.approvalStatus === "rejected") {
+      return sendError(
+        res,
+        403,
+        "Your registration was not approved. Please contact the administrator."
+      );
+    }
+
+    if (user.approvalStatus !== "approved") {
+      console.error(
+        `Unexpected approval status for user ID ${user.id}.`
+      );
+
+      return sendError(
+        res,
+        403,
+        "Your account cannot sign in at this time. Please contact the administrator."
+      );
+    }
+
+    // Generate a token only after all checks pass.
     const token = generateToken(user);
 
     await writeAuditLog({
@@ -356,14 +387,14 @@ const login = async (req, res) => {
       action: "login",
       description:
         `${user.firstName} ${user.lastName} logged in successfully.`,
-      entityId: user.id
+      entityId: user.id,
     });
 
     return res.status(200).json({
       success: true,
       message: "Login successful.",
       token,
-      user: toSafeUser(user)
+      user: toSafeUser(user),
     });
   } catch (error) {
     logError("Login error:", error);
@@ -407,7 +438,7 @@ const updateProfile = async (req, res) => {
     const {
       firstName,
       lastName,
-      email
+      email,
     } = req.body || {};
 
     if (
@@ -448,13 +479,13 @@ const updateProfile = async (req, res) => {
     const normalizedEmail = normalizeEmail(email);
 
     if (
-      normalizedFirstName.length > 100 ||
-      normalizedLastName.length > 100
+      normalizedFirstName.length > 50 ||
+      normalizedLastName.length > 50
     ) {
       return sendError(
         res,
         400,
-        "First name and last name must not exceed 100 characters."
+        "First name and last name must not exceed 50 characters."
       );
     }
 
@@ -466,11 +497,11 @@ const updateProfile = async (req, res) => {
       );
     }
 
-    // Check if another account already uses this email.
+    // Prevent another user from taking this email address.
     const existingUser = await User.findOne({
       where: {
-        email: normalizedEmail
-      }
+        email: normalizedEmail,
+      },
     });
 
     if (
@@ -511,7 +542,7 @@ const updateProfile = async (req, res) => {
         action: "update",
         description:
           `User profile updated. Changed fields: ${changedFields.join(", ")}.`,
-        entityId: user.id
+        entityId: user.id,
       });
     }
 
@@ -521,7 +552,7 @@ const updateProfile = async (req, res) => {
         changedFields.length > 0
           ? "Profile updated successfully."
           : "No profile changes were made.",
-      user: toSafeUser(user)
+      user: toSafeUser(user),
     });
   } catch (error) {
     logError("Profile update error:", error);
@@ -563,7 +594,7 @@ const changePassword = async (req, res) => {
     const {
       currentPassword,
       newPassword,
-      confirmPassword
+      confirmPassword,
     } = req.body || {};
 
     if (
@@ -653,12 +684,12 @@ const changePassword = async (req, res) => {
       action: "update",
       description:
         `Password changed successfully for ${user.firstName} ${user.lastName}.`,
-      entityId: user.id
+      entityId: user.id,
     });
 
     return res.status(200).json({
       success: true,
-      message: "Password changed successfully."
+      message: "Password changed successfully.",
     });
   } catch (error) {
     logError("Change password error:", error);
@@ -679,5 +710,5 @@ module.exports = {
   register,
   login,
   updateProfile,
-  changePassword
+  changePassword,
 };

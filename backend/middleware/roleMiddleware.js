@@ -1,17 +1,4 @@
 
-// ======================================================
-// Authorize by Role
-// ======================================================
-//
-// Must be used AFTER authenticate middleware, so req.user
-// is populated. Returns 401 if authentication didn't run,
-// and 403 if the user's role is not in the allowed list.
-//
-// Usage:
-//   router.post("/medicines", authenticate, authorize("admin"), handler);
-//   router.get("/sales", authenticate, authorize("admin", "cashier"), handler);
-// ======================================================
-
 const authorize = (...allowedRoles) => {
   return (req, res, next) => {
     if (!req.user) {
@@ -32,10 +19,6 @@ const authorize = (...allowedRoles) => {
     return next();
   };
 };
-
-// ======================================================
-// Export
-// ======================================================
 
 module.exports = {
   authorize
