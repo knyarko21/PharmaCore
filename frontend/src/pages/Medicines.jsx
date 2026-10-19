@@ -21,7 +21,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 
 import api from "../services/api";
-import { useAuth } from "../context/useAuth";
+import { useAuth } from "../context/AuthContext";
 
 // ======================================================
 // Constants
