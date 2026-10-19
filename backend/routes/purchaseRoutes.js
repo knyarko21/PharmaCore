@@ -1,4 +1,5 @@
 
+
 const express = require("express");
 
 const {
@@ -14,9 +15,6 @@ const { authenticate } = require("../middleware/authMiddleware");
 const { authorize } = require("../middleware/roleMiddleware");
 const { validate } = require("../middleware/validationMiddleware");
 
-// IMPORTANT:
-// The filename is PurchaseValidator.js with a capital "P".
-// Linux hosting platforms such as Render are case-sensitive.
 const {
   createPurchaseSchema,
   updatePurchaseSchema,
@@ -28,11 +26,16 @@ const {
 
 const router = express.Router();
 
-// ======================================================
-// Role permissions
-// ======================================================
+// Roles allowed to view purchase records.
+const PURCHASE_READ_ROLES = [
+  "admin",
+  "pharmacist",
+  "inventory_manager",
+  "cashier",
+];
 
-const PURCHASE_ROLES = [
+// Roles allowed to create and manage purchases.
+const PURCHASE_MANAGE_ROLES = [
   "admin",
   "pharmacist",
   "inventory_manager",
@@ -43,84 +46,55 @@ const PURCHASE_CANCEL_ROLES = [
   "inventory_manager",
 ];
 
-// ======================================================
-// GET /api/purchases
-// Retrieve all purchases
-// ======================================================
-
+// View all purchases.
 router.get(
   "/",
   authenticate,
-  authorize(...PURCHASE_ROLES),
+  authorize(...PURCHASE_READ_ROLES),
   getAllPurchases
 );
 
-// ======================================================
-// GET /api/purchases/:id
-// Retrieve a single purchase
-// ======================================================
-
+// View a single purchase.
 router.get(
   "/:id",
   authenticate,
-  authorize(...PURCHASE_ROLES),
+  authorize(...PURCHASE_READ_ROLES),
   getPurchaseById
 );
 
-// ======================================================
-// POST /api/purchases
-// Create a new purchase
-// ======================================================
-
+// Create a purchase.
 router.post(
   "/",
   authenticate,
-  authorize(...PURCHASE_ROLES),
+  authorize(...PURCHASE_MANAGE_ROLES),
   validate(createPurchaseSchema),
   createPurchase
 );
 
-// ======================================================
-// POST /api/purchases/:id/receive
-// Receive a purchase and process its inventory
-// ======================================================
-
+// Receive a purchase and update inventory.
 router.post(
   "/:id/receive",
   authenticate,
-  authorize(...PURCHASE_ROLES),
+  authorize(...PURCHASE_MANAGE_ROLES),
   validate(receivePurchaseSchema),
   receivePurchase
 );
 
-// ======================================================
-// PUT /api/purchases/:id
-// Update an existing purchase
-// ======================================================
-
+// Update a purchase.
 router.put(
   "/:id",
   authenticate,
-  authorize(...PURCHASE_ROLES),
+  authorize(...PURCHASE_MANAGE_ROLES),
   validate(updatePurchaseSchema),
   updatePurchase
 );
 
-// ======================================================
-// DELETE /api/purchases/:id
-// Cancel a purchase
-// Only admins and inventory managers can cancel purchases.
-// ======================================================
-
+// Cancel a purchase.
 router.delete(
   "/:id",
   authenticate,
   authorize(...PURCHASE_CANCEL_ROLES),
   cancelPurchase
 );
-
-// ======================================================
-// Export router
-// ======================================================
 
 module.exports = router;
