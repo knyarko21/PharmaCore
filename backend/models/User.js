@@ -1,15 +1,7 @@
 
+
 const { DataTypes } = require("sequelize");
 const sequelize = require("../config/database");
-
-// ======================================================
-// User Model
-// ======================================================
-//
-// Default scope excludes the password field.
-// Use the "withPassword" scope when authentication
-// needs to compare a submitted password with its hash.
-// ======================================================
 
 const User = sequelize.define(
   "User",
@@ -17,17 +9,17 @@ const User = sequelize.define(
     id: {
       type: DataTypes.INTEGER,
       autoIncrement: true,
-      primaryKey: true
+      primaryKey: true,
     },
 
     firstName: {
       type: DataTypes.STRING(50),
-      allowNull: false
+      allowNull: false,
     },
 
     lastName: {
       type: DataTypes.STRING(50),
-      allowNull: false
+      allowNull: false,
     },
 
     email: {
@@ -35,13 +27,13 @@ const User = sequelize.define(
       allowNull: false,
       unique: true,
       validate: {
-        isEmail: true
-      }
+        isEmail: true,
+      },
     },
 
     password: {
       type: DataTypes.STRING(255),
-      allowNull: false
+      allowNull: false,
     },
 
     role: {
@@ -49,19 +41,19 @@ const User = sequelize.define(
         "admin",
         "pharmacist",
         "cashier",
-        "inventory_manager"
+        "inventory_manager",
+        "procurement"
       ),
       allowNull: false,
-      defaultValue: "cashier"
+      defaultValue: "cashier",
     },
 
     isActive: {
       type: DataTypes.BOOLEAN,
       allowNull: false,
-      defaultValue: true
+      defaultValue: true,
     },
 
-    // New accounts must be approved by an administrator.
     approvalStatus: {
       type: DataTypes.ENUM(
         "pending",
@@ -69,8 +61,8 @@ const User = sequelize.define(
         "rejected"
       ),
       allowNull: false,
-      defaultValue: "pending"
-    }
+      defaultValue: "pending",
+    },
   },
   {
     tableName: "users",
@@ -78,17 +70,17 @@ const User = sequelize.define(
 
     defaultScope: {
       attributes: {
-        exclude: ["password"]
-      }
+        exclude: ["password"],
+      },
     },
 
     scopes: {
       withPassword: {
         attributes: {
-          include: ["password"]
-        }
-      }
-    }
+          include: ["password"],
+        },
+      },
+    },
   }
 );
 

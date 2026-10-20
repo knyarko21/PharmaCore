@@ -1,10 +1,7 @@
 
+
 const { User } = require("../models");
 const { createAuditLog } = require("../services/auditLogService");
-
-// ======================================================
-// Helpers
-// ======================================================
 
 const logError = (context, error) => {
   console.error("=================================");
@@ -16,19 +13,19 @@ const logError = (context, error) => {
 const sendError = (res, status, message) =>
   res.status(status).json({
     success: false,
-    message
+    message,
   });
 
-const VALID_ROLES = [
-  "admin",
+const STAFF_ROLES = [
   "pharmacist",
   "cashier",
-  "inventory_manager"
+  "inventory_manager",
+  "procurement",
 ];
 
 const VALID_APPROVAL_STATUSES = [
   "approved",
-  "rejected"
+  "rejected",
 ];
 
 const toSafeUser = (user) => ({
@@ -40,14 +37,14 @@ const toSafeUser = (user) => ({
   isActive: user.isActive,
   approvalStatus: user.approvalStatus,
   createdAt: user.createdAt,
-  updatedAt: user.updatedAt
+  updatedAt: user.updatedAt,
 });
 
 const writeAuditLog = async ({
   req,
   action,
   description,
-  entityId
+  entityId,
 }) => {
   try {
     await createAuditLog({
@@ -58,27 +55,25 @@ const writeAuditLog = async ({
       entityType: "User",
       entityId,
       ipAddress: req.ip,
-      userAgent: req.get("user-agent")
+      userAgent: req.get("user-agent"),
     });
   } catch (error) {
-    // Do not silently hide audit failures.
-    // The approval action remains successful, but the failure is logged.
-    console.error("User management audit log error:", error.message);
+    console.error(
+      "User management audit log error:",
+      error.message
+    );
   }
 };
 
-// ======================================================
-// List Users
+// =============================================
 // GET /api/users
-//
+// Optional filter: ?approvalStatus=pending
 // Admin only.
-// Optional query: ?approvalStatus=pending
-// ======================================================
+// =============================================
 
 const getUsers = async (req, res) => {
   try {
     const { approvalStatus } = req.query;
-
     const where = {};
 
     if (approvalStatus) {
@@ -86,7 +81,7 @@ const getUsers = async (req, res) => {
         ![
           "pending",
           "approved",
-          "rejected"
+          "rejected",
         ].includes(approvalStatus)
       ) {
         return sendError(
@@ -110,15 +105,15 @@ const getUsers = async (req, res) => {
         "isActive",
         "approvalStatus",
         "createdAt",
-        "updatedAt"
+        "updatedAt",
       ],
-      order: [["createdAt", "DESC"]]
+      order: [["createdAt", "DESC"]],
     });
 
     return res.status(200).json({
       success: true,
       count: users.length,
-      users: users.map(toSafeUser)
+      users: users.map(toSafeUser),
     });
   } catch (error) {
     logError("Get users error:", error);
@@ -131,19 +126,17 @@ const getUsers = async (req, res) => {
   }
 };
 
-// ======================================================
-// Review Registration
+// =============================================
 // PATCH /api/users/:id/approval
 //
-// Admin only.
-// Body:
-// {
-//   "approvalStatus": "approved",
-//   "role": "pharmacist"
-// }
+// Approve:
+// { "approvalStatus": "approved", "role": "pharmacist" }
 //
-// For rejection, role is optional.
-// ======================================================
+// Reject:
+// { "approvalStatus": "rejected" }
+//
+// Admin only.
+// =============================================
 
 const reviewUserRegistration = async (req, res) => {
   try {
@@ -160,14 +153,9 @@ const reviewUserRegistration = async (req, res) => {
       );
     }
 
-    const {
-      approvalStatus,
-      role
-    } = req.body || {};
+    const { approvalStatus, role } = req.body || {};
 
-    if (
-      !VALID_APPROVAL_STATUSES.includes(approvalStatus)
-    ) {
+    if (!VALID_APPROVAL_STATUSES.includes(approvalStatus)) {
       return sendError(
         res,
         400,
@@ -177,23 +165,25 @@ const reviewUserRegistration = async (req, res) => {
 
     if (
       approvalStatus === "approved" &&
-      !VALID_ROLES.filter((item) => item !== "admin").includes(role)
+      !STAFF_ROLES.includes(role)
     ) {
       return sendError(
         res,
         400,
-        "Choose a valid non-admin role when approving a registration."
+        "Choose a valid staff role when approving a registration."
       );
     }
 
+    // Do not allow the role field to be used for
+    // arbitrary role changes during rejection.
     if (
-      role !== undefined &&
-      !VALID_ROLES.includes(role)
+      approvalStatus === "rejected" &&
+      role !== undefined
     ) {
       return sendError(
         res,
         400,
-        "Invalid user role."
+        "Do not provide a role when rejecting a registration."
       );
     }
 
@@ -207,18 +197,15 @@ const reviewUserRegistration = async (req, res) => {
       );
     }
 
-    // Do not let the administrator accidentally revoke
-    // their own administrator access through this endpoint.
     if (Number(user.id) === Number(req.user.id)) {
       return sendError(
         res,
         400,
-        "You cannot change your own approval status through this endpoint."
+        "You cannot review your own account."
       );
     }
 
-    // Public registration must never be used to create
-    // additional administrator accounts.
+    // Protect all existing administrator accounts.
     if (user.role === "admin") {
       return sendError(
         res,
@@ -227,7 +214,15 @@ const reviewUserRegistration = async (req, res) => {
       );
     }
 
-    const previousStatus = user.approvalStatus;
+    // This endpoint is for pending registrations only.
+    if (user.approvalStatus !== "pending") {
+      return sendError(
+        res,
+        409,
+        "This registration has already been reviewed."
+      );
+    }
+
     const previousRole = user.role;
 
     user.approvalStatus = approvalStatus;
@@ -241,22 +236,33 @@ const reviewUserRegistration = async (req, res) => {
 
     await writeAuditLog({
       req,
-      action: approvalStatus === "approved" ? "approve" : "reject",
+      action:
+        approvalStatus === "approved"
+          ? "approve"
+          : "reject",
       description:
-        `Administrator ${req.user.email} changed user ${user.email} approval status from ${previousStatus} to ${approvalStatus}. Role: ${previousRole} -> ${user.role}.`,
-      entityId: user.id
+        `Administrator ${req.user.email} ${approvalStatus} registration for ${user.email}. Role: ${previousRole} -> ${user.role}.`,
+      entityId: user.id,
     });
 
     return res.status(200).json({
       success: true,
       message:
         approvalStatus === "approved"
-          ? "User approved successfully."
+          ? "User approved successfully. They can now sign in."
           : "Registration rejected successfully.",
-      user: toSafeUser(user)
+      user: toSafeUser(user),
     });
   } catch (error) {
     logError("Review user registration error:", error);
+
+    if (error.name === "SequelizeValidationError") {
+      return sendError(
+        res,
+        400,
+        "The requested user role or approval status is invalid."
+      );
+    }
 
     return sendError(
       res,
@@ -266,13 +272,11 @@ const reviewUserRegistration = async (req, res) => {
   }
 };
 
-// ======================================================
-// Update User Activation
+// =============================================
 // PATCH /api/users/:id/activation
-//
-// Admin only.
 // Body: { "isActive": false }
-// ======================================================
+// Admin only.
+// =============================================
 
 const updateUserActivation = async (req, res) => {
   try {
@@ -332,7 +336,7 @@ const updateUserActivation = async (req, res) => {
       action: isActive ? "activate" : "deactivate",
       description:
         `Administrator ${req.user.email} ${isActive ? "activated" : "deactivated"} user ${user.email}.`,
-      entityId: user.id
+      entityId: user.id,
     });
 
     return res.status(200).json({
@@ -340,7 +344,7 @@ const updateUserActivation = async (req, res) => {
       message: isActive
         ? "User account activated successfully."
         : "User account deactivated successfully.",
-      user: toSafeUser(user)
+      user: toSafeUser(user),
     });
   } catch (error) {
     logError("Update user activation error:", error);
@@ -356,5 +360,6 @@ const updateUserActivation = async (req, res) => {
 module.exports = {
   getUsers,
   reviewUserRegistration,
-  updateUserActivation
+  updateUserActivation,
 };
+

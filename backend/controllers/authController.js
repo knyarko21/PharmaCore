@@ -1,13 +1,10 @@
 
+
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 
 const { User } = require("../models");
 const { createAuditLog } = require("../services/auditLogService");
-
-// ======================================================
-// Constants
-// ======================================================
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -15,13 +12,12 @@ const PASSWORD_MIN_LENGTH = 8;
 const PASSWORD_MAX_LENGTH = 72;
 const BCRYPT_ROUNDS = 12;
 
-// Public users may register, but cannot choose their own role.
-const PUBLIC_REGISTRATION_ROLE = "cashier";
-const PUBLIC_REGISTRATION_STATUS = "approved";
-
-// ======================================================
-// Logging and HTTP Responses
-// ======================================================
+const REQUESTABLE_ROLES = [
+  "pharmacist",
+  "cashier",
+  "inventory_manager",
+  "procurement",
+];
 
 const logError = (context, error) => {
   console.error("=================================");
@@ -36,19 +32,10 @@ const sendError = (res, status, message) =>
     message,
   });
 
-// ======================================================
-// Request Metadata
-// ======================================================
-
 const getRequestMeta = (req) => ({
   ipAddress: req.ip,
   userAgent: req.get("user-agent"),
 });
-
-// ======================================================
-// Safe User Response
-// Never return the password hash.
-// ======================================================
 
 const toSafeUser = (user) => ({
   id: user.id,
@@ -59,10 +46,6 @@ const toSafeUser = (user) => ({
   isActive: user.isActive,
   approvalStatus: user.approvalStatus,
 });
-
-// ======================================================
-// JWT Generation
-// ======================================================
 
 const generateToken = (user) => {
   if (!process.env.JWT_SECRET) {
@@ -80,11 +63,6 @@ const generateToken = (user) => {
     }
   );
 };
-
-// ======================================================
-// Audit Logging
-// Audit failures must not expose sensitive information.
-// ======================================================
 
 const writeAuditLog = async ({
   req,
@@ -112,10 +90,6 @@ const writeAuditLog = async ({
   }
 };
 
-// ======================================================
-// Validation Helpers
-// ======================================================
-
 const normalizeEmail = (email) =>
   email.trim().toLowerCase();
 
@@ -139,16 +113,13 @@ const validatePassword = (password) => {
   return null;
 };
 
-// ======================================================
+// =============================================
 // Register User
 // POST /api/auth/register
 //
-// Public registration:
-// - Automatically approves new accounts.
-// - Assigns the cashier role only.
-// - Never accepts a role from the client.
-// - Does not automatically issue an authentication token.
-// ======================================================
+// New accounts request a staff role and await
+// administrator approval. No token is issued.
+// =============================================
 
 const register = async (req, res) => {
   try {
@@ -157,9 +128,9 @@ const register = async (req, res) => {
       lastName,
       email,
       password,
+      requestedRole,
     } = req.body || {};
 
-    // Validate required fields.
     if (
       typeof firstName !== "string" ||
       typeof lastName !== "string" ||
@@ -181,7 +152,6 @@ const register = async (req, res) => {
     const normalizedLastName = lastName.trim();
     const normalizedEmail = normalizeEmail(email);
 
-    // Validate names.
     if (
       normalizedFirstName.length > 50 ||
       normalizedLastName.length > 50
@@ -193,7 +163,6 @@ const register = async (req, res) => {
       );
     }
 
-    // Validate email.
     if (!isValidEmail(normalizedEmail)) {
       return sendError(
         res,
@@ -202,14 +171,20 @@ const register = async (req, res) => {
       );
     }
 
-    // Validate password.
     const passwordError = validatePassword(password);
 
     if (passwordError) {
       return sendError(res, 400, passwordError);
     }
 
-    // Check whether the email is already registered.
+    if (!REQUESTABLE_ROLES.includes(requestedRole)) {
+      return sendError(
+        res,
+        400,
+        "Choose a valid staff role: pharmacist, cashier, inventory_manager or procurement."
+      );
+    }
+
     const existingUser = await User.findOne({
       where: {
         email: normalizedEmail,
@@ -224,40 +199,36 @@ const register = async (req, res) => {
       );
     }
 
-    // Hash the password before saving it.
     const hashedPassword = await bcrypt.hash(
       password,
       BCRYPT_ROUNDS
     );
 
-    // Never trust client-supplied role or approval status.
-    // Every public registration receives the same limited role.
+    // Never accept role, isActive, or approvalStatus
+    // directly from the request body.
     const user = await User.create({
       firstName: normalizedFirstName,
       lastName: normalizedLastName,
       email: normalizedEmail,
       password: hashedPassword,
-      role: PUBLIC_REGISTRATION_ROLE,
+      role: requestedRole,
       isActive: true,
-      approvalStatus: PUBLIC_REGISTRATION_STATUS,
+      approvalStatus: "pending",
     });
 
-    // Record the registration in the audit log.
     await writeAuditLog({
       req,
       userId: user.id,
-      action: "create",
+      action: "register",
       description:
-        `Public account registered and automatically approved for ${user.firstName} ${user.lastName}.`,
+        `Registration submitted by ${user.firstName} ${user.lastName}. Requested role: ${requestedRole}. Awaiting administrator approval.`,
       entityId: user.id,
     });
 
-    // Return safe user information, never the password hash.
-    // The user must sign in to obtain an authentication token.
     return res.status(201).json({
       success: true,
       message:
-        "Registration successful. Your account is ready. Please sign in to continue.",
+        "Registration submitted successfully. Your account is awaiting administrator approval.",
       user: toSafeUser(user),
     });
   } catch (error) {
@@ -271,6 +242,14 @@ const register = async (req, res) => {
       );
     }
 
+    if (error.name === "SequelizeValidationError") {
+      return sendError(
+        res,
+        400,
+        "The registration details are invalid."
+      );
+    }
+
     return sendError(
       res,
       500,
@@ -279,12 +258,11 @@ const register = async (req, res) => {
   }
 };
 
-// ======================================================
+// =============================================
 // Login User
 // POST /api/auth/login
-//
-// Only active and approved users can sign in.
-// ======================================================
+// Only active, approved users can sign in.
+// =============================================
 
 const login = async (req, res) => {
   try {
@@ -313,7 +291,6 @@ const login = async (req, res) => {
       );
     }
 
-    // Explicitly include the password for comparison.
     const user = await User.scope("withPassword").findOne({
       where: {
         email: normalizedEmail,
@@ -328,7 +305,6 @@ const login = async (req, res) => {
       );
     }
 
-    // Verify credentials before disclosing account status.
     const passwordMatch = await bcrypt.compare(
       password,
       user.password
@@ -367,10 +343,6 @@ const login = async (req, res) => {
     }
 
     if (user.approvalStatus !== "approved") {
-      console.error(
-        `Unexpected approval status for user ID ${user.id}.`
-      );
-
       return sendError(
         res,
         403,
@@ -378,7 +350,6 @@ const login = async (req, res) => {
       );
     }
 
-    // Generate a token only after all checks pass.
     const token = generateToken(user);
 
     await writeAuditLog({
@@ -407,11 +378,10 @@ const login = async (req, res) => {
   }
 };
 
-// ======================================================
+// =============================================
 // Update Profile
 // PUT /api/auth/profile
-// Requires authentication.
-// ======================================================
+// =============================================
 
 const updateProfile = async (req, res) => {
   try {
@@ -435,42 +405,20 @@ const updateProfile = async (req, res) => {
       );
     }
 
-    const {
-      firstName,
-      lastName,
-      email,
-    } = req.body || {};
+    const { firstName, lastName, email } = req.body || {};
 
     if (
       typeof firstName !== "string" ||
-      !firstName.trim()
-    ) {
-      return sendError(
-        res,
-        400,
-        "First name is required."
-      );
-    }
-
-    if (
+      !firstName.trim() ||
       typeof lastName !== "string" ||
-      !lastName.trim()
-    ) {
-      return sendError(
-        res,
-        400,
-        "Last name is required."
-      );
-    }
-
-    if (
+      !lastName.trim() ||
       typeof email !== "string" ||
       !email.trim()
     ) {
       return sendError(
         res,
         400,
-        "Email is required."
+        "First name, last name and email are required."
       );
     }
 
@@ -497,7 +445,6 @@ const updateProfile = async (req, res) => {
       );
     }
 
-    // Prevent another user from taking this email address.
     const existingUser = await User.findOne({
       where: {
         email: normalizedEmail,
@@ -573,11 +520,10 @@ const updateProfile = async (req, res) => {
   }
 };
 
-// ======================================================
+// =============================================
 // Change Password
 // PUT /api/auth/password
-// Requires authentication.
-// ======================================================
+// =============================================
 
 const changePassword = async (req, res) => {
   try {
@@ -618,10 +564,7 @@ const changePassword = async (req, res) => {
       return sendError(
         res,
         400,
-        passwordError.replace(
-          /^Password/,
-          "New password"
-        )
+        passwordError.replace(/^Password/, "New password")
       );
     }
 
@@ -701,10 +644,6 @@ const changePassword = async (req, res) => {
     );
   }
 };
-
-// ======================================================
-// Export Controllers
-// ======================================================
 
 module.exports = {
   register,
