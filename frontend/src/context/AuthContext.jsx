@@ -9,6 +9,7 @@ import {
 } from "react";
 
 import api from "../services/api";
+
 import {
   getStoredToken,
   setStoredToken,
@@ -21,6 +22,7 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // Restore an existing login session when the app opens.
   useEffect(() => {
     let cancelled = false;
 
@@ -28,13 +30,17 @@ export const AuthProvider = ({ children }) => {
       const token = getStoredToken();
 
       if (!token) {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
         return;
       }
 
       api.defaults.headers = api.defaults.headers || {};
-      api.defaults.headers.common = api.defaults.headers.common || {};
-      api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+      api.defaults.headers.common =
+        api.defaults.headers.common || {};
+
+      api.defaults.headers.common.Authorization = `Bearer ${token}`;
 
       try {
         const response = await api.get("/auth/me");
@@ -45,7 +51,9 @@ export const AuthProvider = ({ children }) => {
           setUser(response.data.user);
         } else {
           clearStoredToken();
-          delete api.defaults.headers.common["Authorization"];
+
+          delete api.defaults.headers.common.Authorization;
+
           setUser(null);
         }
       } catch (error) {
@@ -53,11 +61,15 @@ export const AuthProvider = ({ children }) => {
 
         if (!cancelled) {
           clearStoredToken();
-          delete api.defaults.headers.common["Authorization"];
+
+          delete api.defaults.headers.common.Authorization;
+
           setUser(null);
         }
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     };
 
@@ -68,6 +80,7 @@ export const AuthProvider = ({ children }) => {
     };
   }, []);
 
+  // Normal login using email and password.
   const login = useCallback(async (email, password) => {
     const response = await api.post("/auth/login", {
       email,
@@ -75,26 +88,55 @@ export const AuthProvider = ({ children }) => {
     });
 
     if (!response.data?.success) {
-      throw new Error(response.data?.message || "Login failed.");
+      throw new Error(
+        response.data?.message || "Login failed."
+      );
     }
 
     const { token, user: loggedInUser } = response.data;
 
-    if (!token) {
-      throw new Error("Login succeeded but no token was returned.");
+    if (!token || !loggedInUser) {
+      throw new Error(
+        "Login succeeded but the user session was incomplete."
+      );
     }
 
     setStoredToken(token);
 
     api.defaults.headers = api.defaults.headers || {};
-    api.defaults.headers.common = api.defaults.headers.common || {};
-    api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+    api.defaults.headers.common =
+      api.defaults.headers.common || {};
+
+    api.defaults.headers.common.Authorization = `Bearer ${token}`;
 
     setUser(loggedInUser);
 
     return loggedInUser;
   }, []);
 
+  // Complete authentication when registration already returned
+  // a valid token and user from the backend.
+  const loginWithToken = useCallback((loggedInUser, token) => {
+    if (!token || !loggedInUser) {
+      throw new Error(
+        "Registration succeeded but the user session was incomplete."
+      );
+    }
+
+    setStoredToken(token);
+
+    api.defaults.headers = api.defaults.headers || {};
+    api.defaults.headers.common =
+      api.defaults.headers.common || {};
+
+    api.defaults.headers.common.Authorization = `Bearer ${token}`;
+
+    setUser(loggedInUser);
+
+    return loggedInUser;
+  }, []);
+
+  // Log out and clear the local session.
   const logout = useCallback(async () => {
     try {
       await api.post("/auth/logout");
@@ -104,7 +146,7 @@ export const AuthProvider = ({ children }) => {
       clearStoredToken();
 
       if (api?.defaults?.headers?.common) {
-        delete api.defaults.headers.common["Authorization"];
+        delete api.defaults.headers.common.Authorization;
       }
 
       setUser(null);
@@ -117,9 +159,10 @@ export const AuthProvider = ({ children }) => {
       loading,
       isAuthenticated: Boolean(user),
       login,
+      loginWithToken,
       logout,
     }),
-    [user, loading, login, logout]
+    [user, loading, login, loginWithToken, logout]
   );
 
   return (
@@ -133,7 +176,9 @@ export const useAuth = () => {
   const context = useContext(AuthContext);
 
   if (!context) {
-    throw new Error("useAuth must be used inside AuthProvider.");
+    throw new Error(
+      "useAuth must be used inside AuthProvider."
+    );
   }
 
   return context;

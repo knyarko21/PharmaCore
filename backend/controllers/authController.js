@@ -1,5 +1,4 @@
 
-
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 
@@ -117,8 +116,9 @@ const validatePassword = (password) => {
 // Register User
 // POST /api/auth/register
 //
-// New accounts request a staff role and await
-// administrator approval. No token is issued.
+// Public staff registration.
+// New accounts are active and approved immediately.
+// Administrator registration is never public.
 // =============================================
 
 const register = async (req, res) => {
@@ -204,6 +204,7 @@ const register = async (req, res) => {
       BCRYPT_ROUNDS
     );
 
+    // Only accept the explicitly allowed public staff roles.
     // Never accept role, isActive, or approvalStatus
     // directly from the request body.
     const user = await User.create({
@@ -213,7 +214,7 @@ const register = async (req, res) => {
       password: hashedPassword,
       role: requestedRole,
       isActive: true,
-      approvalStatus: "pending",
+      approvalStatus: "approved",
     });
 
     await writeAuditLog({
@@ -221,14 +222,27 @@ const register = async (req, res) => {
       userId: user.id,
       action: "register",
       description:
-        `Registration submitted by ${user.firstName} ${user.lastName}. Requested role: ${requestedRole}. Awaiting administrator approval.`,
+        `Account created for ${user.firstName} ${user.lastName}. Role: ${requestedRole}.`,
+      entityId: user.id,
+    });
+
+    // Sign in the user immediately after successful registration.
+    const token = generateToken(user);
+
+    await writeAuditLog({
+      req,
+      userId: user.id,
+      action: "login",
+      description:
+        `${user.firstName} ${user.lastName} signed in after registration.`,
       entityId: user.id,
     });
 
     return res.status(201).json({
       success: true,
       message:
-        "Registration submitted successfully. Your account is awaiting administrator approval.",
+        "Registration successful. Your account is ready to use.",
+      token,
       user: toSafeUser(user),
     });
   } catch (error) {
@@ -261,7 +275,9 @@ const register = async (req, res) => {
 // =============================================
 // Login User
 // POST /api/auth/login
-// Only active, approved users can sign in.
+//
+// Any active account with valid credentials can
+// sign in, regardless of approvalStatus.
 // =============================================
 
 const login = async (req, res) => {
@@ -323,30 +339,6 @@ const login = async (req, res) => {
         res,
         403,
         "Your account has been deactivated. Please contact the administrator."
-      );
-    }
-
-    if (user.approvalStatus === "pending") {
-      return sendError(
-        res,
-        403,
-        "Your registration is awaiting administrator approval."
-      );
-    }
-
-    if (user.approvalStatus === "rejected") {
-      return sendError(
-        res,
-        403,
-        "Your registration was not approved. Please contact the administrator."
-      );
-    }
-
-    if (user.approvalStatus !== "approved") {
-      return sendError(
-        res,
-        403,
-        "Your account cannot sign in at this time. Please contact the administrator."
       );
     }
 

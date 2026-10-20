@@ -16,7 +16,7 @@ const logError = (context, error) => {
 const sendError = (res, status, message) =>
   res.status(status).json({
     success: false,
-    message
+    message,
   });
 
 // ======================================================
@@ -80,7 +80,7 @@ const authenticate = async (req, res, next) => {
     }
 
     // 4. Always load the current database user.
-    // Never rely on a potentially outdated JWT role.
+    // This ensures role changes take effect immediately.
     const user = await User.findByPk(Number(decoded.id));
 
     if (!user) {
@@ -91,7 +91,7 @@ const authenticate = async (req, res, next) => {
       );
     }
 
-    // 5. Check account activation
+    // 5. Block deactivated accounts
     if (!user.isActive) {
       return sendError(
         res,
@@ -100,24 +100,8 @@ const authenticate = async (req, res, next) => {
       );
     }
 
-    // 6. Check administrator approval
-    if (user.approvalStatus !== "approved") {
-      if (user.approvalStatus === "rejected") {
-        return sendError(
-          res,
-          403,
-          "Your registration was not approved. Please contact the administrator."
-        );
-      }
-
-      return sendError(
-        res,
-        403,
-        "Your account is awaiting administrator approval."
-      );
-    }
-
-    // 7. Attach current, safe database user information
+    // 6. Attach current, safe database user information.
+    // Approval status no longer blocks authentication.
     req.user = {
       id: user.id,
       firstName: user.firstName,
@@ -125,7 +109,7 @@ const authenticate = async (req, res, next) => {
       email: user.email,
       role: user.role,
       isActive: user.isActive,
-      approvalStatus: user.approvalStatus
+      approvalStatus: user.approvalStatus,
     };
 
     return next();
@@ -157,5 +141,5 @@ const authenticate = async (req, res, next) => {
 };
 
 module.exports = {
-  authenticate
+  authenticate,
 };
