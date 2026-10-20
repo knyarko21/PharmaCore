@@ -14,9 +14,9 @@ const {
 
 const { createAuditLog } = require("./auditLogService");
 
-// --------------------------------------------------
-// HELPERS
-// --------------------------------------------------
+// ======================================================
+// CONFIGURATION & HELPERS
+// ======================================================
 
 const createHttpError = (message, statusCode = 400) => {
   const error = new Error(message);
@@ -24,55 +24,177 @@ const createHttpError = (message, statusCode = 400) => {
   return error;
 };
 
-const isValidDate = (value) => {
-  if (typeof value !== "string") {
-    return false;
+const normalizeId = (value, fieldName = "ID") => {
+  const id = Number(value);
+
+  if (!Number.isSafeInteger(id) || id <= 0) {
+    throw createHttpError(`${fieldName} must be a valid ID.`);
   }
 
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    return false;
+  return id;
+};
+
+const requireUserId = (userId) => {
+  if (
+    userId === undefined ||
+    userId === null ||
+    userId === ""
+  ) {
+    throw createHttpError(
+      "Your login session could not be verified. Please log in again.",
+      401
+    );
+  }
+
+  return normalizeId(userId, "Authenticated user ID");
+};
+
+const validateDate = (value, fieldName = "Date") => {
+  if (
+    typeof value !== "string" ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(value)
+  ) {
+    throw createHttpError(
+      `${fieldName} must use YYYY-MM-DD format.`
+    );
   }
 
   const date = new Date(`${value}T00:00:00.000Z`);
 
-  return (
-    !Number.isNaN(date.getTime()) &&
-    date.toISOString().slice(0, 10) === value
-  );
+  if (
+    Number.isNaN(date.getTime()) ||
+    date.toISOString().slice(0, 10) !== value
+  ) {
+    throw createHttpError(`${fieldName} is not a valid date.`);
+  }
+
+  return value;
 };
 
 const getToday = () => {
-  return new Date().toISOString().slice(0, 10);
+  const now = new Date();
+
+  return [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, "0"),
+    String(now.getDate()).padStart(2, "0"),
+  ].join("-");
 };
 
 const generatePurchaseNumber = () => {
   const date = getToday().replace(/-/g, "");
-  const randomNumber = crypto.randomInt(100000, 1000000);
 
-  return `PUR-${date}-${randomNumber}`;
+  return `PUR-${date}-${crypto.randomInt(100000, 1000000)}`;
 };
 
 const generateBatchNumber = () => {
   const date = getToday().replace(/-/g, "");
-  const randomNumber = crypto.randomInt(100000, 1000000);
 
-  return `BATCH-${date}-${randomNumber}`;
+  return `BATCH-${date}-${crypto.randomInt(100000, 1000000)}`;
 };
 
-// --------------------------------------------------
+const normalizeMoney = (value, fieldName = "Price") => {
+  const amount = Number(value);
+
+  if (!Number.isFinite(amount) || amount < 0) {
+    throw createHttpError(
+      `${fieldName} must be a valid non-negative amount.`
+    );
+  }
+
+  return Math.round((amount + Number.EPSILON) * 100) / 100;
+};
+
+const calculateTotal = (items) => {
+  const cents = items.reduce((sum, item) => {
+    return sum + Math.round(item.totalPrice * 100);
+  }, 0);
+
+  return cents / 100;
+};
+
+const normalizePurchaseItems = async (
+  items,
+  transaction
+) => {
+  if (!Array.isArray(items) || items.length === 0) {
+    throw createHttpError(
+      "A purchase must contain at least one medicine."
+    );
+  }
+
+  const normalizedItems = [];
+  const seenMedicineIds = new Set();
+
+  for (const item of items) {
+    const medicineId = normalizeId(
+      item.medicineId,
+      "Medicine ID"
+    );
+
+    const quantity = Number(item.quantity);
+
+    if (
+      !Number.isSafeInteger(quantity) ||
+      quantity <= 0
+    ) {
+      throw createHttpError(
+        "Purchase quantities must be positive whole numbers."
+      );
+    }
+
+    if (seenMedicineIds.has(medicineId)) {
+      throw createHttpError(
+        "A medicine cannot appear more than once in the same purchase. Combine its quantities."
+      );
+    }
+
+    seenMedicineIds.add(medicineId);
+
+    const unitPrice = normalizeMoney(
+      item.unitPrice,
+      "Purchase unit price"
+    );
+
+    const medicine = await Medicine.findByPk(medicineId, {
+      transaction,
+    });
+
+    if (!medicine) {
+      throw createHttpError(
+        `Medicine with ID ${medicineId} was not found.`,
+        404
+      );
+    }
+
+    normalizedItems.push({
+      medicineId,
+      quantity,
+      unitPrice,
+      totalPrice: normalizeMoney(
+        quantity * unitPrice,
+        "Purchase item total"
+      ),
+    });
+  }
+
+  return normalizedItems;
+};
+
+// ======================================================
 // UNIQUE NUMBER GENERATION
-// --------------------------------------------------
+// ======================================================
 
 const generateUniquePurchaseNumber = async (transaction) => {
   for (let attempt = 0; attempt < 10; attempt += 1) {
     const purchaseNumber = generatePurchaseNumber();
 
-    const existingPurchase = await Purchase.findOne({
+    const existing = await Purchase.findOne({
       where: { purchaseNumber },
       transaction,
     });
 
-    if (!existingPurchase) {
+    if (!existing) {
       return purchaseNumber;
     }
   }
@@ -87,25 +209,25 @@ const generateUniqueBatchNumber = async (transaction) => {
   for (let attempt = 0; attempt < 10; attempt += 1) {
     const batchNumber = generateBatchNumber();
 
-    const existingBatch = await Batch.findOne({
+    const existing = await Batch.findOne({
       where: { batchNumber },
       transaction,
     });
 
-    if (!existingBatch) {
+    if (!existing) {
       return batchNumber;
     }
   }
 
   throw createHttpError(
-    "Unable to generate a unique batch number. Please try receiving the purchase again.",
+    "Unable to generate a unique batch number. Please try again.",
     503
   );
 };
 
-// --------------------------------------------------
+// ======================================================
 // AUDIT LOGGING
-// --------------------------------------------------
+// ======================================================
 
 const writeAuditLog = async ({
   userId,
@@ -130,15 +252,17 @@ const writeAuditLog = async ({
       userAgent: requestMetadata.userAgent || null,
     });
   } catch (error) {
-    // A logging failure must not undo a completed purchase operation.
-    console.error("Purchase audit log failed:", error.message);
+    // Logging failure should not undo a completed operation.
+    console.error(
+      "Purchase audit log failed:",
+      error.message
+    );
   }
 };
 
-// --------------------------------------------------
-// PURCHASE INCLUDES
-// IMPORTANT: The User association alias is "creator".
-// --------------------------------------------------
+// ======================================================
+// ASSOCIATIONS
+// ======================================================
 
 const getPurchaseIncludes = () => [
   {
@@ -168,43 +292,41 @@ const getPurchaseIncludes = () => [
   },
 ];
 
-// --------------------------------------------------
+// ======================================================
 // CREATE PURCHASE
-// --------------------------------------------------
+// ======================================================
 
 const createPurchase = async (
   data,
   userId,
   requestMetadata = {}
 ) => {
+  const creatorId = requireUserId(userId);
+
   const transaction = await sequelize.transaction();
 
   let purchase;
 
   try {
     const {
-      supplierId,
-      expectedDeliveryDate,
+      supplierId: rawSupplierId,
       notes,
       items,
-    } = data;
+    } = data || {};
 
-    if (!supplierId) {
-      throw createHttpError("Please select a supplier.");
-    }
+    const supplierId = normalizeId(
+      rawSupplierId,
+      "Supplier ID"
+    );
 
-    if (
-      expectedDeliveryDate &&
-      !isValidDate(expectedDeliveryDate)
-    ) {
+    const creator = await User.findByPk(creatorId, {
+      transaction,
+    });
+
+    if (!creator) {
       throw createHttpError(
-        "Expected delivery date must be a valid date in YYYY-MM-DD format."
-      );
-    }
-
-    if (!Array.isArray(items) || items.length === 0) {
-      throw createHttpError(
-        "A purchase must contain at least one medicine."
+        "The logged-in user no longer exists. Please log in again.",
+        401
       );
     }
 
@@ -219,86 +341,29 @@ const createPurchase = async (
       );
     }
 
-    const normalizedItems = [];
-    const seenMedicineIds = new Set();
-
-    for (const item of items) {
-      const medicineId = Number(item.medicineId);
-      const quantity = Number(item.quantity);
-      const unitPrice = Number(item.unitPrice);
-
-      if (
-        !Number.isInteger(medicineId) ||
-        medicineId <= 0
-      ) {
-        throw createHttpError(
-          "Every purchase item must have a valid medicine."
-        );
-      }
-
-      if (seenMedicineIds.has(medicineId)) {
-        throw createHttpError(
-          "A medicine cannot appear more than once in the same purchase. Combine its quantities."
-        );
-      }
-
-      seenMedicineIds.add(medicineId);
-
-      if (
-        !Number.isInteger(quantity) ||
-        quantity <= 0
-      ) {
-        throw createHttpError(
-          "Purchase quantities must be positive whole numbers."
-        );
-      }
-
-      if (
-        !Number.isFinite(unitPrice) ||
-        unitPrice < 0
-      ) {
-        throw createHttpError(
-          "Purchase prices must be valid, non-negative amounts."
-        );
-      }
-
-      const medicine = await Medicine.findByPk(medicineId, {
-        transaction,
-      });
-
-      if (!medicine) {
-        throw createHttpError(
-          `Medicine with ID ${medicineId} was not found.`,
-          404
-        );
-      }
-
-      normalizedItems.push({
-        medicineId,
-        quantity,
-        unitPrice,
-        totalPrice: Number(
-          (quantity * unitPrice).toFixed(2)
-        ),
-      });
-    }
-
-    const totalAmount = Number(
-      normalizedItems
-        .reduce((sum, item) => sum + item.totalPrice, 0)
-        .toFixed(2)
+    const normalizedItems = await normalizePurchaseItems(
+      items,
+      transaction
     );
+
+    const totalAmount = calculateTotal(normalizedItems);
 
     const purchaseNumber =
       await generateUniquePurchaseNumber(transaction);
 
+    // The database column is `createdBy`, not `createdById`.
+    // expectedDeliveryDate is omitted because it is not
+    // present in the verified purchases table schema.
     purchase = await Purchase.create(
       {
         purchaseNumber,
+        purchaseDate: new Date(),
         supplierId,
-        createdById: userId,
-        expectedDeliveryDate: expectedDeliveryDate || null,
-        notes: notes || null,
+        createdBy: creatorId,
+        notes:
+          typeof notes === "string"
+            ? notes.trim() || null
+            : null,
         status: "pending",
         totalAmount,
       },
@@ -333,8 +398,8 @@ const createPurchase = async (
   }
 
   await writeAuditLog({
-    userId,
-    action: "PURCHASE_CREATED",
+    userId: creatorId,
+    action: "create",
     entity: "Purchase",
     entityId: purchase.id,
     details: {
@@ -348,9 +413,9 @@ const createPurchase = async (
   return getPurchaseById(purchase.id);
 };
 
-// --------------------------------------------------
+// ======================================================
 // GET ALL PURCHASES
-// --------------------------------------------------
+// ======================================================
 
 const getAllPurchases = async (filters = {}) => {
   const where = {};
@@ -360,7 +425,10 @@ const getAllPurchases = async (filters = {}) => {
   }
 
   if (filters.supplierId) {
-    where.supplierId = filters.supplierId;
+    where.supplierId = normalizeId(
+      filters.supplierId,
+      "Supplier ID"
+    );
   }
 
   if (filters.search) {
@@ -380,12 +448,14 @@ const getAllPurchases = async (filters = {}) => {
   });
 };
 
-// --------------------------------------------------
+// ======================================================
 // GET PURCHASE BY ID
-// --------------------------------------------------
+// ======================================================
 
 const getPurchaseById = async (purchaseId) => {
-  const purchase = await Purchase.findByPk(purchaseId, {
+  const id = normalizeId(purchaseId, "Purchase ID");
+
+  const purchase = await Purchase.findByPk(id, {
     include: getPurchaseIncludes(),
   });
 
@@ -399,9 +469,9 @@ const getPurchaseById = async (purchaseId) => {
   return purchase;
 };
 
-// --------------------------------------------------
+// ======================================================
 // UPDATE PENDING PURCHASE
-// --------------------------------------------------
+// ======================================================
 
 const updatePurchase = async (
   purchaseId,
@@ -409,10 +479,14 @@ const updatePurchase = async (
   userId,
   requestMetadata = {}
 ) => {
+  const creatorId = requireUserId(userId);
+  const id = normalizeId(purchaseId, "Purchase ID");
   const transaction = await sequelize.transaction();
 
+  let purchase;
+
   try {
-    const purchase = await Purchase.findByPk(purchaseId, {
+    purchase = await Purchase.findByPk(id, {
       transaction,
       lock: transaction.LOCK.UPDATE,
     });
@@ -431,13 +505,17 @@ const updatePurchase = async (
     }
 
     const {
-      supplierId,
-      expectedDeliveryDate,
+      supplierId: rawSupplierId,
       notes,
       items,
-    } = data;
+    } = data || {};
 
-    if (supplierId !== undefined) {
+    if (rawSupplierId !== undefined) {
+      const supplierId = normalizeId(
+        rawSupplierId,
+        "Supplier ID"
+      );
+
       const supplier = await Supplier.findByPk(supplierId, {
         transaction,
       });
@@ -452,130 +530,41 @@ const updatePurchase = async (
       purchase.supplierId = supplierId;
     }
 
-    if (expectedDeliveryDate !== undefined) {
-      if (
-        expectedDeliveryDate &&
-        !isValidDate(expectedDeliveryDate)
-      ) {
-        throw createHttpError(
-          "Expected delivery date must be a valid date in YYYY-MM-DD format."
-        );
-      }
-
-      purchase.expectedDeliveryDate =
-        expectedDeliveryDate || null;
-    }
-
     if (notes !== undefined) {
-      purchase.notes = notes || null;
+      purchase.notes =
+        typeof notes === "string"
+          ? notes.trim() || null
+          : null;
     }
 
     if (items !== undefined) {
-      if (!Array.isArray(items) || items.length === 0) {
-        throw createHttpError(
-          "A purchase must contain at least one medicine."
-        );
-      }
-
-      const normalizedItems = [];
-      const seenMedicineIds = new Set();
-
-      for (const item of items) {
-        const medicineId = Number(item.medicineId);
-        const quantity = Number(item.quantity);
-        const unitPrice = Number(item.unitPrice);
-
-        if (
-          !Number.isInteger(medicineId) ||
-          medicineId <= 0
-        ) {
-          throw createHttpError(
-            "Every purchase item must have a valid medicine."
-          );
-        }
-
-        if (seenMedicineIds.has(medicineId)) {
-          throw createHttpError(
-            "A medicine cannot appear more than once in the same purchase."
-          );
-        }
-
-        seenMedicineIds.add(medicineId);
-
-        if (
-          !Number.isInteger(quantity) ||
-          quantity <= 0
-        ) {
-          throw createHttpError(
-            "Purchase quantities must be positive whole numbers."
-          );
-        }
-
-        if (
-          !Number.isFinite(unitPrice) ||
-          unitPrice < 0
-        ) {
-          throw createHttpError(
-            "Purchase prices must be valid, non-negative amounts."
-          );
-        }
-
-        const medicine = await Medicine.findByPk(medicineId, {
-          transaction,
-        });
-
-        if (!medicine) {
-          throw createHttpError(
-            `Medicine with ID ${medicineId} was not found.`,
-            404
-          );
-        }
-
-        normalizedItems.push({
-          purchaseId: purchase.id,
-          medicineId,
-          quantity,
-          unitPrice,
-          totalPrice: Number(
-            (quantity * unitPrice).toFixed(2)
-          ),
-        });
-      }
+      const normalizedItems = await normalizePurchaseItems(
+        items,
+        transaction
+      );
 
       await PurchaseItem.destroy({
-        where: {
+        where: { purchaseId: purchase.id },
+        transaction,
+      });
+
+      await PurchaseItem.bulkCreate(
+        normalizedItems.map((item) => ({
           purchaseId: purchase.id,
-        },
-        transaction,
-      });
-
-      await PurchaseItem.bulkCreate(normalizedItems, {
-        transaction,
-      });
-
-      purchase.totalAmount = Number(
-        normalizedItems
-          .reduce((sum, item) => sum + item.totalPrice, 0)
-          .toFixed(2)
+          medicineId: item.medicineId,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          totalPrice: item.totalPrice,
+        })),
+        { transaction }
       );
+
+      purchase.totalAmount = calculateTotal(normalizedItems);
     }
 
     await purchase.save({ transaction });
 
     await transaction.commit();
-
-    await writeAuditLog({
-      userId,
-      action: "PURCHASE_UPDATED",
-      entity: "Purchase",
-      entityId: purchase.id,
-      details: {
-        purchaseNumber: purchase.purchaseNumber,
-      },
-      requestMetadata,
-    });
-
-    return getPurchaseById(purchase.id);
   } catch (error) {
     if (!transaction.finished) {
       await transaction.rollback();
@@ -583,23 +572,38 @@ const updatePurchase = async (
 
     throw error;
   }
+
+  await writeAuditLog({
+    userId: creatorId,
+    action: "update",
+    entity: "Purchase",
+    entityId: purchase.id,
+    details: {
+      purchaseNumber: purchase.purchaseNumber,
+    },
+    requestMetadata,
+  });
+
+  return getPurchaseById(purchase.id);
 };
 
-// --------------------------------------------------
+// ======================================================
 // CANCEL PENDING PURCHASE
-// --------------------------------------------------
+// ======================================================
 
 const cancelPurchase = async (
   purchaseId,
   userId,
   requestMetadata = {}
 ) => {
+  const actorId = requireUserId(userId);
+  const id = normalizeId(purchaseId, "Purchase ID");
   const transaction = await sequelize.transaction();
 
   let purchase;
 
   try {
-    purchase = await Purchase.findByPk(purchaseId, {
+    purchase = await Purchase.findByPk(id, {
       transaction,
       lock: transaction.LOCK.UPDATE,
     });
@@ -631,12 +635,13 @@ const cancelPurchase = async (
   }
 
   await writeAuditLog({
-    userId,
-    action: "PURCHASE_CANCELLED",
+    userId: actorId,
+    action: "update",
     entity: "Purchase",
     entityId: purchase.id,
     details: {
       purchaseNumber: purchase.purchaseNumber,
+      status: "cancelled",
     },
     requestMetadata,
   });
@@ -644,9 +649,9 @@ const cancelPurchase = async (
   return getPurchaseById(purchase.id);
 };
 
-// --------------------------------------------------
+// ======================================================
 // RECEIVE PURCHASE
-// --------------------------------------------------
+// ======================================================
 
 const receivePurchase = async (
   purchaseId,
@@ -654,13 +659,15 @@ const receivePurchase = async (
   userId,
   requestMetadata = {}
 ) => {
+  const actorId = requireUserId(userId);
+  const id = normalizeId(purchaseId, "Purchase ID");
   const transaction = await sequelize.transaction();
 
   let purchase;
   const receivedBatchNumbers = [];
 
   try {
-    purchase = await Purchase.findByPk(purchaseId, {
+    purchase = await Purchase.findByPk(id, {
       include: [
         {
           model: PurchaseItem,
@@ -703,22 +710,14 @@ const receivePurchase = async (
     const seenPurchaseItemIds = new Set();
 
     for (const receivedItem of data.items) {
-      const purchaseItemId = Number(
-        receivedItem.purchaseItemId
+      const purchaseItemId = normalizeId(
+        receivedItem.purchaseItemId,
+        "Purchase item ID"
       );
-
-      if (
-        !Number.isInteger(purchaseItemId) ||
-        purchaseItemId <= 0
-      ) {
-        throw createHttpError(
-          "Every received item must reference a valid purchase item."
-        );
-      }
 
       if (seenPurchaseItemIds.has(purchaseItemId)) {
         throw createHttpError(
-          "A purchase item cannot be received more than once in the same request."
+          "A purchase item cannot be received more than once."
         );
       }
 
@@ -735,11 +734,14 @@ const receivePurchase = async (
       }
 
       const quantity = Number(receivedItem.quantity);
-      const sellingPrice = Number(receivedItem.sellingPrice);
+      const sellingPrice = normalizeMoney(
+        receivedItem.sellingPrice,
+        "Selling price"
+      );
       const purchasePrice = Number(purchaseItem.unitPrice);
 
       if (
-        !Number.isInteger(quantity) ||
+        !Number.isSafeInteger(quantity) ||
         quantity <= 0
       ) {
         throw createHttpError(
@@ -765,22 +767,16 @@ const receivePurchase = async (
         );
       }
 
-      if (
-        !Number.isFinite(sellingPrice) ||
-        sellingPrice < purchasePrice
-      ) {
+      if (sellingPrice < purchasePrice) {
         throw createHttpError(
           `Selling price for ${medicine.name} must be at least its purchase price.`
         );
       }
 
-      const expiryDate = receivedItem.expiryDate;
-
-      if (!isValidDate(expiryDate)) {
-        throw createHttpError(
-          `Enter a valid expiry date for ${medicine.name} in YYYY-MM-DD format.`
-        );
-      }
+      const expiryDate = validateDate(
+        receivedItem.expiryDate,
+        `Expiry date for ${medicine.name}`
+      );
 
       if (expiryDate <= getToday()) {
         throw createHttpError(
@@ -788,30 +784,20 @@ const receivePurchase = async (
         );
       }
 
-      const manufactureDate =
-        receivedItem.manufactureDate || null;
+      let manufactureDate = null;
 
-      if (
-        manufactureDate &&
-        !isValidDate(manufactureDate)
-      ) {
-        throw createHttpError(
-          `Enter a valid manufacture date for ${medicine.name}.`
+      if (receivedItem.manufactureDate) {
+        manufactureDate = validateDate(
+          receivedItem.manufactureDate,
+          `Manufacture date for ${medicine.name}`
         );
-      }
 
-      if (
-        manufactureDate &&
-        manufactureDate > expiryDate
-      ) {
-        throw createHttpError(
-          `Manufacture date cannot be later than the expiry date for ${medicine.name}.`
-        );
+        if (manufactureDate > expiryDate) {
+          throw createHttpError(
+            `Manufacture date cannot be later than the expiry date for ${medicine.name}.`
+          );
+        }
       }
-
-      // --------------------------------------------------
-      // GENERATE A BATCH NUMBER IF THE FIELD IS BLANK
-      // --------------------------------------------------
 
       const suppliedBatchNumber =
         typeof receivedItem.batchNumber === "string"
@@ -828,14 +814,8 @@ const receivePurchase = async (
         suppliedBatchNumber ||
         (await generateUniqueBatchNumber(transaction));
 
-      // --------------------------------------------------
-      // CHECK WHETHER THE BATCH ALREADY EXISTS
-      // --------------------------------------------------
-
       const existingBatch = await Batch.findOne({
-        where: {
-          batchNumber,
-        },
+        where: { batchNumber },
         transaction,
         lock: transaction.LOCK.UPDATE,
       });
@@ -843,16 +823,12 @@ const receivePurchase = async (
       if (existingBatch) {
         if (
           Number(existingBatch.medicineId) !==
-          Number(purchaseItem.medicineId)
+            Number(purchaseItem.medicineId) ||
+          String(existingBatch.expiryDate).slice(0, 10) !==
+            expiryDate
         ) {
           throw createHttpError(
-            `Batch number ${batchNumber} is already assigned to another medicine.`
-          );
-        }
-
-        if (existingBatch.expiryDate !== expiryDate) {
-          throw createHttpError(
-            `Batch ${batchNumber} already exists with a different expiry date.`
+            `Batch ${batchNumber} already exists with different medicine or expiry details.`
           );
         }
 
@@ -862,10 +838,7 @@ const receivePurchase = async (
         existingBatch.purchasePrice = purchasePrice;
         existingBatch.sellingPrice = sellingPrice;
         existingBatch.manufactureDate = manufactureDate;
-
-        if (purchase.supplierId) {
-          existingBatch.supplierId = purchase.supplierId;
-        }
+        existingBatch.supplierId = purchase.supplierId || null;
 
         await existingBatch.save({ transaction });
       } else {
@@ -891,7 +864,6 @@ const receivePurchase = async (
       });
     }
 
-    // Mark the purchase as received after all items are processed.
     purchase.status = "received";
 
     await purchase.save({ transaction });
@@ -913,12 +885,13 @@ const receivePurchase = async (
   }
 
   await writeAuditLog({
-    userId,
-    action: "PURCHASE_RECEIVED",
+    userId: actorId,
+    action: "update",
     entity: "Purchase",
     entityId: purchase.id,
     details: {
       purchaseNumber: purchase.purchaseNumber,
+      status: "received",
       batches: receivedBatchNumbers,
     },
     requestMetadata,
@@ -927,9 +900,9 @@ const receivePurchase = async (
   return getPurchaseById(purchase.id);
 };
 
-// --------------------------------------------------
+// ======================================================
 // EXPORTS
-// --------------------------------------------------
+// ======================================================
 
 module.exports = {
   createPurchase,
