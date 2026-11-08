@@ -19,9 +19,11 @@ import {
   Search,
   Settings,
   ShoppingCart,
+  Stethoscope,
   Truck,
   Users,
   X,
+  ShieldCheck,
 } from "lucide-react";
 
 import {
@@ -44,10 +46,12 @@ import api from "../services/api";
 */
 
 const ROLES = {
+  SUPERADMIN: "superadmin",
   ADMIN: "admin",
   CASHIER: "cashier",
   PHARMACIST: "pharmacist",
   INVENTORY_MANAGER: "inventory_manager",
+  PROCUREMENT: "procurement",
 };
 
 const ALL_ROLES = Object.values(ROLES);
@@ -69,11 +73,64 @@ const ANALYTICS_ROLES = [
   ROLES.INVENTORY_MANAGER,
 ];
 
+const SUPERADMIN_ONLY = [
+  ROLES.SUPERADMIN,
+];
+
+const ADMIN_AND_SUPERADMIN = [
+  ROLES.SUPERADMIN,
+  ROLES.ADMIN,
+];
+
 const normalizeRole = (role) =>
   String(role || "")
     .trim()
     .toLowerCase()
     .replace(/[\s-]+/g, "_");
+
+// ======================================================
+// Frontend Role Hierarchy
+// ======================================================
+
+// Super Admin inherits all System Admin permissions.
+// System Admin does not inherit Super Admin permissions.
+// Other staff retain their existing permissions.
+
+const ROLE_HIERARCHY = {
+  [ROLES.SUPERADMIN]: [
+    ROLES.SUPERADMIN,
+    ROLES.ADMIN,
+  ],
+
+  [ROLES.ADMIN]: [
+    ROLES.ADMIN,
+  ],
+
+  [ROLES.CASHIER]: [
+    ROLES.CASHIER,
+  ],
+
+  [ROLES.PHARMACIST]: [
+    ROLES.PHARMACIST,
+  ],
+
+  [ROLES.INVENTORY_MANAGER]: [
+    ROLES.INVENTORY_MANAGER,
+  ],
+
+  [ROLES.PROCUREMENT]: [
+    ROLES.PROCUREMENT,
+  ],
+};
+
+const hasRolePermission = (userRole, allowedRoles) => {
+  const inheritedRoles =
+    ROLE_HIERARCHY[normalizeRole(userRole)] || [];
+
+  return allowedRoles.some((role) =>
+    inheritedRoles.includes(normalizeRole(role))
+  );
+};
 
 /*
 |--------------------------------------------------------------------------
@@ -125,6 +182,12 @@ const NAV_ITEMS = [
     roles: SALES_ROLES,
   },
   {
+    label: "Doctors",
+    path: "/doctors",
+    icon: Stethoscope,
+    roles: PHARMACY_ROLES,
+  },
+  {
     label: "Prescriptions",
     path: "/prescriptions",
     icon: FileText,
@@ -135,6 +198,18 @@ const NAV_ITEMS = [
     path: "/analytics",
     icon: BarChart3,
     roles: ANALYTICS_ROLES,
+  },
+  {
+    label: "Admin Management",
+    path: "/admin-management",
+    icon: ShieldCheck,
+    roles: SUPERADMIN_ONLY,
+  },
+  {
+    label: "User Approvals",
+    path: "/user-approvals",
+    icon: CheckCheck,
+    roles: ADMIN_AND_SUPERADMIN,
   },
   {
     label: "Audit Logs",
@@ -295,13 +370,20 @@ const MainLayout = () => {
 
   const userRole = normalizeRole(user?.role);
 
+  // Super Admin inherits System Admin navigation permissions.
   const visibleNavItems = useMemo(
     () =>
-      NAV_ITEMS.filter((item) => item.roles.includes(userRole)),
+      NAV_ITEMS.filter((item) =>
+        hasRolePermission(userRole, item.roles)
+      ),
     [userRole]
   );
 
-  const canManageSettings = userRole === ROLES.ADMIN;
+  // Both Super Admin and System Admin can manage settings.
+  const canManageSettings = hasRolePermission(
+    userRole,
+    [ROLES.ADMIN]
+  );
 
   /*
    * Keep read notification status separate for each user.
@@ -679,7 +761,9 @@ const MainLayout = () => {
 
   return (
     <div className="min-h-screen w-full min-w-0 overflow-x-clip bg-[#08080a] text-zinc-100 antialiased">
+
       {/* Mobile sidebar backdrop */}
+
       {sidebarOpen && (
         <button
           type="button"
@@ -690,6 +774,7 @@ const MainLayout = () => {
       )}
 
       {/* Sidebar */}
+
       <aside
         ref={sidebarRef}
         aria-label="Main navigation"
@@ -697,7 +782,9 @@ const MainLayout = () => {
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
+
         {/* Brand */}
+
         <div className="flex h-20 shrink-0 items-center justify-between border-b border-white/[0.06] px-5 sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
             <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-600 to-fuchsia-600 shadow-lg shadow-violet-600/30">
@@ -728,6 +815,7 @@ const MainLayout = () => {
         </div>
 
         {/* Role-aware navigation */}
+
         <nav
           className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain px-4 py-6"
           aria-label="Workspace navigation"
@@ -771,6 +859,7 @@ const MainLayout = () => {
         </nav>
 
         {/* Account actions */}
+
         <div className="shrink-0 border-t border-white/[0.06] p-4">
           {canManageSettings && (
             <NavLink
@@ -805,9 +894,13 @@ const MainLayout = () => {
       </aside>
 
       {/* Main content */}
+
       <div className="min-h-screen w-full min-w-0 lg:pl-72">
+
         {/* Header */}
+
         <header className="sticky top-0 z-30 flex h-16 w-full min-w-0 items-center justify-between gap-2 border-b border-white/[0.06] bg-[#08080a] px-3 text-zinc-100 sm:h-20 sm:px-6 lg:px-8">
+
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <button
               type="button"
@@ -831,7 +924,9 @@ const MainLayout = () => {
           </div>
 
           <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+
             {/* Search */}
+
             <button
               type="button"
               onClick={() =>
@@ -852,6 +947,7 @@ const MainLayout = () => {
             </button>
 
             {/* System status */}
+
             <div
               className="hidden items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs font-medium text-emerald-400 lg:flex"
               aria-label="Application interface is running"
@@ -866,6 +962,7 @@ const MainLayout = () => {
             </div>
 
             {/* Notifications */}
+
             <div className="relative shrink-0" ref={notificationRef}>
               <button
                 type="button"
@@ -891,6 +988,7 @@ const MainLayout = () => {
                   aria-label="Notifications panel"
                   className="absolute right-0 top-full z-50 mt-3 w-[min(25rem,calc(100vw-1.5rem))] overflow-hidden rounded-2xl border border-white/[0.08] bg-[#0e0e11] shadow-2xl shadow-black/60 sm:rounded-3xl"
                 >
+
                   <div className="flex items-center justify-between gap-2 border-b border-white/[0.06] px-4 py-4 sm:px-5">
                     <div className="min-w-0">
                       <h3 className="font-semibold">
@@ -942,6 +1040,7 @@ const MainLayout = () => {
                   </div>
 
                   {/* Loading state */}
+
                   {loadingAlerts && alerts.length === 0 && (
                     <div className="px-5 py-10 text-center">
                       <RefreshCw
@@ -956,6 +1055,7 @@ const MainLayout = () => {
                   )}
 
                   {/* Error state */}
+
                   {alertError && (
                     <div className="mx-4 mt-4 flex gap-3 rounded-2xl border border-red-500/20 bg-red-500/[0.08] p-3">
                       <AlertTriangle
@@ -984,6 +1084,7 @@ const MainLayout = () => {
                   )}
 
                   {/* Alert list */}
+
                   {alerts.length > 0 && (
                     <div className="max-h-[min(28rem,60vh)] overflow-y-auto overscroll-contain">
                       {alerts.map((alert) => {
@@ -1037,6 +1138,7 @@ const MainLayout = () => {
                   )}
 
                   {/* Empty state */}
+
                   {!loadingAlerts &&
                     !alertError &&
                     alerts.length === 0 && (
@@ -1057,6 +1159,7 @@ const MainLayout = () => {
                     )}
 
                   {/* Notification footer */}
+
                   <div className="border-t border-white/[0.06] bg-[#0b0b0e] px-4 py-3 sm:px-5">
                     <div className="flex items-center justify-between gap-3">
                       <p className="text-[11px] text-zinc-500">
@@ -1088,6 +1191,7 @@ const MainLayout = () => {
             </div>
 
             {/* Signed-in user */}
+
             <div className="ml-1 hidden min-w-0 items-center gap-3 border-l border-white/[0.06] pl-3 sm:flex sm:pl-4">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet-600 to-fuchsia-600 text-sm font-bold text-white shadow-lg shadow-violet-600/30 ring-1 ring-inset ring-white/[0.08]">
                 {getInitials(user)}
@@ -1110,6 +1214,7 @@ const MainLayout = () => {
         </header>
 
         {/* Current page */}
+
         <main className="relative w-full min-w-0 bg-[#08080a] p-4 text-zinc-100 sm:p-6 lg:p-8">
           <div className="w-full min-w-0">
             <Outlet />

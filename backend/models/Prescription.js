@@ -2,58 +2,57 @@
 const { DataTypes } = require("sequelize");
 const sequelize = require("../config/database");
 
-// ======================================================
-// Prescription Model
-// ======================================================
-//
-// Header for a prescription. Line items live in
-// PrescriptionItem. Status transitions:
-//
-//   active → partially_dispensed → dispensed
-//   active → cancelled
-//
-// Once any item has been dispensed (partially or fully),
-// the prescription cannot be cancelled.
-// ======================================================
-
 const Prescription = sequelize.define(
   "Prescription",
   {
     id: {
       type: DataTypes.INTEGER,
       autoIncrement: true,
-      primaryKey: true
+      primaryKey: true,
     },
 
     prescriptionNumber: {
       type: DataTypes.STRING(50),
       allowNull: false,
-      unique: true
+      unique: true,
     },
 
     prescriptionDate: {
       type: DataTypes.DATEONLY,
-      allowNull: false
+      allowNull: false,
     },
 
+    // Link to a registered doctor.
+    // Nullable to preserve existing prescriptions.
+    doctorId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: {
+        model: "doctors",
+        key: "id",
+      },
+    },
+
+    // Retained for compatibility with existing records
+    // and any existing frontend or service code.
     doctorName: {
       type: DataTypes.STRING(150),
-      allowNull: true
+      allowNull: true,
     },
 
     doctorLicenseNumber: {
       type: DataTypes.STRING(100),
-      allowNull: true
+      allowNull: true,
     },
 
     diagnosis: {
       type: DataTypes.TEXT,
-      allowNull: true
+      allowNull: true,
     },
 
     notes: {
       type: DataTypes.TEXT,
-      allowNull: true
+      allowNull: true,
     },
 
     status: {
@@ -64,7 +63,7 @@ const Prescription = sequelize.define(
         "cancelled"
       ),
       allowNull: false,
-      defaultValue: "active"
+      defaultValue: "active",
     },
 
     customerId: {
@@ -72,8 +71,8 @@ const Prescription = sequelize.define(
       allowNull: false,
       references: {
         model: "customers",
-        key: "id"
-      }
+        key: "id",
+      },
     },
 
     createdBy: {
@@ -81,13 +80,13 @@ const Prescription = sequelize.define(
       allowNull: false,
       references: {
         model: "users",
-        key: "id"
-      }
-    }
+        key: "id",
+      },
+    },
   },
   {
     tableName: "prescriptions",
-    timestamps: true
+    timestamps: true,
   }
 );
 

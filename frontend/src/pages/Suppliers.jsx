@@ -86,7 +86,7 @@ const IconBox = ({ children, className = "", size = "md" }) => {
 // ======================================================
 
 const Suppliers = () => {
-  const { user } = useAuth();
+  const { user, hasRolePermission } = useAuth();
 
   const [suppliers, setSuppliers] = useState([]);
 
@@ -112,14 +112,17 @@ const Suppliers = () => {
   // Permissions
   // ----------------------------------------------
 
-  const canManage =
-    user?.role === "admin" ||
-    user?.role === "pharmacist" ||
-    user?.role === "inventory_manager";
+  const canManage = hasRolePermission([
+    "admin",
+    "pharmacist",
+    "inventory_manager",
+    "procurement",
+  ]);
 
-  const canDeactivate =
-    user?.role === "admin" ||
-    user?.role === "inventory_manager";
+  const canDeactivate = hasRolePermission([
+    "admin",
+    "inventory_manager",
+  ]);
 
   // ----------------------------------------------
   // Fetch suppliers

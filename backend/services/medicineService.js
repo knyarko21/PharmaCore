@@ -31,7 +31,10 @@ const assertCategoryExists = async (categoryId) => {
     categoryId === null ||
     categoryId === ""
   ) {
-    throw createHttpError("Please select a medicine category.", 400);
+    throw createHttpError(
+      "Please select a medicine category.",
+      400
+    );
   }
 
   const category = await Category.findByPk(categoryId);
@@ -47,9 +50,6 @@ const assertCategoryExists = async (categoryId) => {
 // ======================================================
 // SKU Generation Helpers
 // ======================================================
-
-// Converts medicine details into SKU-friendly text.
-// Example: "Paracetamol" becomes "PAR".
 
 const getNameCode = (name) => {
   const words = String(name || "")
@@ -72,8 +72,6 @@ const getNameCode = (name) => {
     .join("");
 };
 
-// Example: "500 mg" becomes "500MG".
-
 const getStrengthCode = (strength) => {
   const code = String(strength || "")
     .trim()
@@ -83,8 +81,6 @@ const getStrengthCode = (strength) => {
   return code.slice(0, 10) || "STD";
 };
 
-// Example: "Tablet" becomes "TAB".
-
 const getDosageFormCode = (dosageForm) => {
   const code = String(dosageForm || "")
     .trim()
@@ -93,9 +89,6 @@ const getDosageFormCode = (dosageForm) => {
 
   return code.slice(0, 3) || "OTH";
 };
-
-// Generates a unique SKU using the medicine details and
-// a random suffix. Existing records are not modified.
 
 const generateUniqueSku = async ({
   name,
@@ -108,7 +101,6 @@ const generateUniqueSku = async ({
 
   const prefix = `MED-${nameCode}-${strengthCode}-${formCode}`;
 
-  // Retry in the unlikely event of a duplicate SKU.
   for (let attempt = 0; attempt < 10; attempt += 1) {
     const suffix = crypto
       .randomBytes(3)
@@ -166,10 +158,15 @@ const assertBarcodeAvailable = async (
 };
 
 // ======================================================
-// General Helpers
+// Image Helpers
 // ======================================================
 
 const normalizeImageUrl = (value) =>
+  typeof value === "string" && value.trim()
+    ? value.trim()
+    : null;
+
+const normalizeImagePublicId = (value) =>
   typeof value === "string" && value.trim()
     ? value.trim()
     : null;
@@ -187,13 +184,13 @@ const createMedicine = async (data) => {
     strength,
     description,
     imageUrl,
+    imagePublicId,
     barcode,
     reorderLevel,
     isPrescriptionRequired,
     categoryId
   } = data;
 
-  // Validate required details before creating the record.
   if (!name || !String(name).trim()) {
     throw createHttpError(
       "Medicine name is required.",
@@ -211,7 +208,6 @@ const createMedicine = async (data) => {
   await assertCategoryExists(categoryId);
 
   // The backend generates the SKU automatically.
-  // A SKU supplied by the frontend is not trusted.
   const sku = await generateUniqueSku({
     name,
     strength,
@@ -227,12 +223,18 @@ const createMedicine = async (data) => {
     dosageForm: String(dosageForm).trim(),
     strength,
     description,
+
+    // Cloudinary image information
     imageUrl: normalizeImageUrl(imageUrl),
+    imagePublicId: normalizeImagePublicId(imagePublicId),
+
     sku,
+
     barcode:
       typeof barcode === "string" && barcode.trim()
         ? barcode.trim()
         : null,
+
     reorderLevel,
     isPrescriptionRequired,
     categoryId
@@ -305,7 +307,7 @@ const updateMedicine = async (id, data) => {
   // Never allow an update request to change the existing SKU.
   delete updateData.sku;
 
-  // Normalize image URLs consistently.
+  // Normalize image URL if supplied.
   if (
     Object.prototype.hasOwnProperty.call(
       updateData,
@@ -317,18 +319,41 @@ const updateMedicine = async (id, data) => {
     );
   }
 
-  // Normalize text fields if supplied.
+  // Normalize Cloudinary public ID if supplied.
   if (
-    typeof updateData.name === "string"
+    Object.prototype.hasOwnProperty.call(
+      updateData,
+      "imagePublicId"
+    )
   ) {
+    updateData.imagePublicId = normalizeImagePublicId(
+      updateData.imagePublicId
+    );
+  }
+
+  // If the image URL changes but no public ID is supplied,
+  // do not associate the new URL with the old Cloudinary ID.
+  if (
+    Object.prototype.hasOwnProperty.call(
+      updateData,
+      "imageUrl"
+    ) &&
+    !Object.prototype.hasOwnProperty.call(
+      updateData,
+      "imagePublicId"
+    ) &&
+    updateData.imageUrl !== medicine.imageUrl
+  ) {
+    updateData.imagePublicId = null;
+  }
+
+  // Normalize text fields if supplied.
+  if (typeof updateData.name === "string") {
     updateData.name = updateData.name.trim();
   }
 
-  if (
-    typeof updateData.dosageForm === "string"
-  ) {
-    updateData.dosageForm =
-      updateData.dosageForm.trim();
+  if (typeof updateData.dosageForm === "string") {
+    updateData.dosageForm = updateData.dosageForm.trim();
   }
 
   await medicine.update(updateData);

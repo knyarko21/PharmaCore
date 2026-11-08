@@ -1,4 +1,5 @@
 
+
 const express = require("express");
 
 const {
@@ -21,25 +22,51 @@ const {
 const router = express.Router();
 
 // ======================================================
-// Middleware shortcuts
+// INVENTORY PERMISSIONS
 // ======================================================
 
-const inventoryReadRoles = ["admin", "pharmacist", "inventory_manager"];
+// All operational roles can view batch information.
+// Cashiers and Procurement are read-only.
+const inventoryReadRoles = [
+  "superadmin",
+  "admin",
+  "pharmacist",
+  "cashier",
+  "inventory_manager",
+  "procurement"
+];
 
-const inventoryWriteRoles = ["admin", "pharmacist", "inventory_manager"];
+// Roles permitted to create and update batches.
+const inventoryWriteRoles = [
+  "superadmin",
+  "admin",
+  "pharmacist",
+  "inventory_manager"
+];
 
-const inventoryDeleteRoles = ["admin", "inventory_manager"];
+// Only Super Admin, Admin and Inventory Manager
+// can delete batches.
+const inventoryDeleteRoles = [
+  "superadmin",
+  "admin",
+  "inventory_manager"
+];
 
 // ======================================================
-// Routes
+// BATCH ROUTES
 // ======================================================
 //
-// GET    /api/batches      list all batches
-// GET    /api/batches/:id  fetch one batch
-// POST   /api/batches      create a batch
-// PUT    /api/batches/:id  update a batch
-// DELETE /api/batches/:id  delete a batch
+// GET    /api/batches
+// GET    /api/batches/:id
+// POST   /api/batches
+// PUT    /api/batches/:id
+// DELETE /api/batches/:id
+//
 // ======================================================
+
+// ------------------------------------------------------
+// GET ALL BATCHES
+// ------------------------------------------------------
 
 router.get(
   "/",
@@ -48,12 +75,20 @@ router.get(
   getAllBatches
 );
 
+// ------------------------------------------------------
+// GET BATCH BY ID
+// ------------------------------------------------------
+
 router.get(
   "/:id",
   authenticate,
   authorize(...inventoryReadRoles),
   getBatchById
 );
+
+// ------------------------------------------------------
+// CREATE BATCH
+// ------------------------------------------------------
 
 router.post(
   "/",
@@ -63,6 +98,10 @@ router.post(
   createBatch
 );
 
+// ------------------------------------------------------
+// UPDATE BATCH
+// ------------------------------------------------------
+
 router.put(
   "/:id",
   authenticate,
@@ -70,6 +109,10 @@ router.put(
   validate(updateBatchSchema),
   updateBatch
 );
+
+// ------------------------------------------------------
+// DELETE BATCH
+// ------------------------------------------------------
 
 router.delete(
   "/:id",

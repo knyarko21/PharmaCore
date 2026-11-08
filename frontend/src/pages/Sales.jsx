@@ -976,7 +976,7 @@ const SaleDetailsModal = ({ sale, onClose }) => {
 // =====================================================
 
 const Sales = () => {
-  const { user } = useAuth();
+  const { user, hasRolePermission } = useAuth();
 
   const [sales, setSales] = useState([]);
   const [medicines, setMedicines] = useState([]);
@@ -1014,11 +1014,7 @@ const Sales = () => {
   // timed-out request cannot create a duplicate sale.
   const saleNumberRef = useRef(null);
 
-  const userRole = String(user?.role || "")
-    .trim()
-    .toLowerCase();
-
-  const canSell = SELLER_ROLES.includes(userRole);
+  const canSell = hasRolePermission(SELLER_ROLES);
 
   // ---------------------------------------------------
   // Data loading

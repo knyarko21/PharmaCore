@@ -1,37 +1,23 @@
 
 const multer = require("multer");
-const path = require("path");
-const fs = require("fs");
 
 // ======================================================
-// Storage configuration
+// Storage Configuration
 // ======================================================
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const dir = path.join(__dirname, "..", "uploads", "medicines");
-    fs.mkdirSync(dir, { recursive: true });
-    cb(null, dir);
-  },
-
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    const unique = `${Date.now()}-${Math.random()
-      .toString(36)
-      .slice(2, 10)}`;
-    cb(null, `${unique}${ext}`);
-  }
-});
+// Keep uploaded files in memory temporarily.
+// The upload controller will stream them to Cloudinary.
+const storage = multer.memoryStorage();
 
 // ======================================================
-// File filter
+// File Validation
 // ======================================================
 
 const ALLOWED_MIME_TYPES = [
   "image/jpeg",
   "image/png",
   "image/webp",
-  "image/gif"
+  "image/gif",
 ];
 
 const fileFilter = (req, file, cb) => {
@@ -39,11 +25,13 @@ const fileFilter = (req, file, cb) => {
     return cb(null, true);
   }
 
-  cb(new Error("Only JPEG, PNG, WebP, and GIF images are allowed."));
+  return cb(
+    new Error("Only JPEG, PNG, WebP, and GIF images are allowed.")
+  );
 };
 
 // ======================================================
-// Upload instance
+// Multer Upload Instance
 // ======================================================
 
 const upload = multer({
@@ -51,10 +39,10 @@ const upload = multer({
   fileFilter,
   limits: {
     fileSize: 3 * 1024 * 1024,
-    files: 1
-  }
+    files: 1,
+  },
 });
 
 module.exports = {
-  upload
+  upload,
 };

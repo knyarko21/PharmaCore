@@ -21,10 +21,12 @@ router.get(
   "/overview",
   authenticate,
   authorize(
+    "superadmin",
     "admin",
     "pharmacist",
     "cashier",
-    "inventory_manager"
+    "inventory_manager",
+    "procurement"
   ),
   getDashboardOverview
 );

@@ -29,14 +29,16 @@ const supplierReadRoles = [
   "admin",
   "pharmacist",
   "cashier",
-  "inventory_manager"
+  "inventory_manager",
+  "procurement"
 ];
 
 // Only authorized roles can modify supplier records.
 const supplierWriteRoles = [
   "admin",
   "pharmacist",
-  "inventory_manager"
+  "inventory_manager",
+  "procurement"
 ];
 
 // ======================================================
@@ -81,7 +83,7 @@ router.put(
 router.delete(
   "/:id",
   authenticate,
-  authorize(...supplierWriteRoles),
+  authorize("admin", "inventory_manager"),
   deactivateSupplier
 );
 

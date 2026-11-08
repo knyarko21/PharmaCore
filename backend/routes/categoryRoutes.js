@@ -28,7 +28,8 @@ const categoryReadRoles = [
   "admin",
   "pharmacist",
   "cashier",
-  "inventory_manager"
+  "inventory_manager",
+  "procurement",
 ];
 
 const categoryWriteRoles = ["admin", "pharmacist", "inventory_manager"];

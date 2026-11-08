@@ -7,11 +7,11 @@ const sequelize = require("../config/database");
 // ======================================================
 //
 // Append-only trail of actions performed in the system.
-// Written by controllers via auditLogService — never
-// updated, never deleted by application code.
+// Written by controllers via auditLogService.
 //
-// `action` is a constrained enum so queries and badges
-// on the frontend can rely on a fixed set of values.
+// Actions use STRING instead of ENUM to support new
+// authentication and business operations without requiring
+// repeated database schema changes.
 // ======================================================
 
 const AuditLog = sequelize.define(
@@ -20,52 +20,42 @@ const AuditLog = sequelize.define(
     id: {
       type: DataTypes.INTEGER,
       autoIncrement: true,
-      primaryKey: true
+      primaryKey: true,
     },
 
     action: {
-      type: DataTypes.ENUM(
-        "create",
-        "update",
-        "delete",
-        "login",
-        "logout",
-        "sale",
-        "purchase",
-        "dispense",
-        "stock_adjustment"
-      ),
-      allowNull: false
+      type: DataTypes.STRING(100),
+      allowNull: false,
     },
 
     module: {
       type: DataTypes.STRING(50),
-      allowNull: false
+      allowNull: false,
     },
 
     description: {
       type: DataTypes.TEXT,
-      allowNull: false
+      allowNull: false,
     },
 
     entityType: {
       type: DataTypes.STRING(50),
-      allowNull: true
+      allowNull: true,
     },
 
     entityId: {
       type: DataTypes.INTEGER,
-      allowNull: true
+      allowNull: true,
     },
 
     ipAddress: {
       type: DataTypes.STRING(45),
-      allowNull: true
+      allowNull: true,
     },
 
     userAgent: {
       type: DataTypes.TEXT,
-      allowNull: true
+      allowNull: true,
     },
 
     userId: {
@@ -73,13 +63,13 @@ const AuditLog = sequelize.define(
       allowNull: false,
       references: {
         model: "users",
-        key: "id"
-      }
-    }
+        key: "id",
+      },
+    },
   },
   {
     tableName: "audit_logs",
-    timestamps: true
+    timestamps: true,
   }
 );
 

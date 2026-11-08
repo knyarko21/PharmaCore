@@ -9,20 +9,27 @@ import api from "../services/api";
 // ======================================================
 //
 // Props:
-//   value    - current image URL (string)
-//   onChange - called with the new URL after upload or removal
-//   label    - optional field label
+//   value       - Current image URL
+//   publicId    - Current Cloudinary public ID
+//   onChange    - Returns the new URL and public ID
+//   label       - Optional field label
+//
 // ======================================================
 
 const ImageUploader = ({
   value,
+  publicId,
   onChange,
-  label = "Medicine Image"
+  label = "Medicine Image",
 }) => {
   const inputRef = useRef(null);
 
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
+
+  // ====================================================
+  // Select and Upload Image
+  // ====================================================
 
   const handleFileSelect = async (event) => {
     const file = event.target.files?.[0];
@@ -31,13 +38,22 @@ const ImageUploader = ({
 
     setError("");
 
-    if (file.size > 3 * 1024 * 1024) {
-      setError("Image must be smaller than 3 MB.");
+    const allowedTypes = [
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+      "image/gif",
+    ];
+
+    if (!allowedTypes.includes(file.type)) {
+      setError("Please select a JPEG, PNG, WebP, or GIF image.");
+      event.target.value = "";
       return;
     }
 
-    if (!file.type.startsWith("image/")) {
-      setError("Please select an image file.");
+    if (file.size > 3 * 1024 * 1024) {
+      setError("Image must be smaller than 3 MB.");
+      event.target.value = "";
       return;
     }
 
@@ -49,28 +65,27 @@ const ImageUploader = ({
 
       const response = await api.post(
         "/uploads/medicine-image",
-        formData,
-        {
-          headers: {
-            "Content-Type": "multipart/form-data"
-          }
-        }
+        formData
       );
 
-      if (!response.data?.success) {
+      const { success, url, publicId: uploadedPublicId } =
+        response.data || {};
+
+      if (!success || !url || !uploadedPublicId) {
         throw new Error(
-          response.data?.message || "Upload failed."
+          response.data?.message ||
+            "Image upload returned incomplete information."
         );
       }
 
-      onChange(response.data.url);
+      onChange(url, uploadedPublicId);
     } catch (uploadError) {
-      console.error("Image upload error:", uploadError);
+      console.error("Medicine image upload error:", uploadError);
 
       setError(
         uploadError.response?.data?.message ||
           uploadError.message ||
-          "Unable to upload image."
+          "Unable to upload image. Please try again."
       );
     } finally {
       setUploading(false);
@@ -81,10 +96,20 @@ const ImageUploader = ({
     }
   };
 
+  // ====================================================
+  // Remove Selected Image
+  // ====================================================
+
   const handleRemove = () => {
-    onChange("");
+    if (uploading) return;
+
+    onChange("", "");
     setError("");
   };
+
+  // ====================================================
+  // Render
+  // ====================================================
 
   return (
     <div>
@@ -103,7 +128,8 @@ const ImageUploader = ({
           <button
             type="button"
             onClick={handleRemove}
-            className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-lg border border-white/[0.08] bg-black/60 text-zinc-300 transition hover:bg-rose-500/20 hover:text-rose-300"
+            disabled={uploading}
+            className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-lg border border-white/[0.08] bg-black/60 text-zinc-300 transition hover:bg-rose-500/20 hover:text-rose-300 disabled:opacity-50"
             aria-label="Remove image"
           >
             <X size={16} />
@@ -119,16 +145,18 @@ const ImageUploader = ({
           {uploading ? (
             <>
               <Loader2 size={24} className="animate-spin" />
-              <span className="text-xs">Uploading...</span>
+              <span className="text-xs">Uploading to Cloudinary...</span>
             </>
           ) : (
             <>
               <ImagePlus size={24} />
+
               <span className="text-xs font-medium">
-                Click to upload an image
+                Click to select a medicine image
               </span>
+
               <span className="text-[10px] text-zinc-600">
-                JPEG, PNG, WebP, or GIF · max 3 MB
+                JPEG, PNG, WebP, or GIF · Maximum 3 MB
               </span>
             </>
           )}
@@ -138,13 +166,21 @@ const ImageUploader = ({
       <input
         ref={inputRef}
         type="file"
-        accept="image/*"
+        accept="image/jpeg,image/png,image/webp,image/gif"
         onChange={handleFileSelect}
         className="hidden"
       />
 
       {error && (
-        <p className="mt-2 text-xs text-rose-400">{error}</p>
+        <p className="mt-2 text-xs text-rose-400">
+          {error}
+        </p>
+      )}
+
+      {value && publicId && (
+        <p className="mt-2 text-xs text-emerald-400">
+          Image uploaded successfully.
+        </p>
       )}
     </div>
   );

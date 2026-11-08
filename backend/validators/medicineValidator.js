@@ -32,11 +32,22 @@ const imageUrlSchema = z
   .or(z.literal(""));
 
 // ======================================================
-// Reusable: SKU
+// Reusable: Cloudinary Public ID
 // ======================================================
 
-// SKU is optional in incoming requests because the backend
-// generates it automatically when creating a medicine.
+const imagePublicIdSchema = z
+  .string()
+  .trim()
+  .max(
+    255,
+    "Image public ID cannot exceed 255 characters."
+  )
+  .optional()
+  .or(z.literal(""));
+
+// ======================================================
+// Reusable: SKU
+// ======================================================
 
 const skuSchema = z
   .string()
@@ -116,6 +127,8 @@ const medicineFields = {
 
   imageUrl: imageUrlSchema,
 
+  imagePublicId: imagePublicIdSchema,
+
   sku: skuSchema,
 
   barcode: z
@@ -159,9 +172,6 @@ const createMedicineSchema = z.object({
 // Update Medicine
 // ======================================================
 
-// All update fields are optional because the client may
-// update only selected medicine details.
-
 const updateMedicineSchema = z.object({
   name: medicineFields.name.optional(),
 
@@ -176,6 +186,8 @@ const updateMedicineSchema = z.object({
   description: medicineFields.description,
 
   imageUrl: medicineFields.imageUrl,
+
+  imagePublicId: medicineFields.imagePublicId,
 
   sku: medicineFields.sku,
 

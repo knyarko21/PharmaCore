@@ -30,6 +30,7 @@ const medicineReadRoles = [
   "pharmacist",
   "cashier",
   "inventory_manager",
+  "procurement",
 ];
 
 // Users who can create new medicines.

@@ -22,6 +22,7 @@ import { createPortal } from "react-dom";
 
 import api from "../services/api";
 import { useAuth } from "../context/AuthContext.jsx";
+import ImageUploader from "../components/ImageUploader";
 
 // ======================================================
 // Constants
@@ -35,6 +36,7 @@ const EMPTY_FORM = {
   strength: "",
   description: "",
   imageUrl: "",
+  imagePublicId: "",
   barcode: "",
   reorderLevel: 10,
   isPrescriptionRequired: false,
@@ -282,29 +284,29 @@ const StockBadge = ({ status, quantity }) => {
 // ======================================================
 
 const Medicines = () => {
-  const { user } = useAuth();
+  const { user, hasRolePermission } = useAuth();
 
-  const role = getRole(user?.role);
-
-  // View-only access is granted to authenticated cashier accounts.
-  const canViewMedicines = [
+  // Super Admin inherits Admin operational permissions.
+  // Cashiers retain view-only access.
+  const canViewMedicines = hasRolePermission([
     "admin",
     "pharmacist",
     "inventory_manager",
     "cashier",
-  ].includes(role);
+    "procurement",
+  ]);
 
-  const canAddMedicine = [
+  const canAddMedicine = hasRolePermission([
     "admin",
     "pharmacist",
     "inventory_manager",
-  ].includes(role);
+  ]);
 
-  const canManageMedicines = [
+  const canManageMedicines = hasRolePermission([
     "admin",
     "pharmacist",
     "inventory_manager",
-  ].includes(role);
+  ]);
 
   const [medicines, setMedicines] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -382,8 +384,6 @@ const Medicines = () => {
       setNotice("");
 
       try {
-        // Each request is handled separately so one unavailable
-        // endpoint does not discard data returned by the others.
         const results = await Promise.allSettled([
           fetchMedicines(),
           fetchCategories(),
@@ -412,6 +412,7 @@ const Medicines = () => {
         }
       } catch (err) {
         console.error("Load medicines page error:", err);
+
         setError(
           getErrorMessage(err, "Unable to load medicine records.")
         );
@@ -574,6 +575,16 @@ const Medicines = () => {
     if (formError) setFormError("");
   };
 
+  const handleImageChange = (url, publicId) => {
+    setForm((current) => ({
+      ...current,
+      imageUrl: url,
+      imagePublicId: publicId,
+    }));
+
+    if (formError) setFormError("");
+  };
+
   const openAddForm = () => {
     if (!canAddMedicine) return;
 
@@ -597,6 +608,7 @@ const Medicines = () => {
       strength: medicine.strength || "",
       description: medicine.description || "",
       imageUrl: medicine.imageUrl || "",
+      imagePublicId: medicine.imagePublicId || "",
       barcode: medicine.barcode || "",
       reorderLevel: medicine.reorderLevel ?? 10,
       isPrescriptionRequired: Boolean(
@@ -613,8 +625,8 @@ const Medicines = () => {
     setShowForm(true);
   };
 
-  const closeForm = () => {
-    if (saving) return;
+  const closeForm = (force = false) => {
+    if (saving && !force) return;
 
     setShowForm(false);
     setEditingMedicine(null);
@@ -662,9 +674,7 @@ const Medicines = () => {
       return "Reorder level must be a valid non-negative number.";
     }
 
-    if (
-      !Number.isInteger(Number(form.reorderLevel))
-    ) {
+    if (!Number.isInteger(Number(form.reorderLevel))) {
       return "Reorder level must be a whole number.";
     }
 
@@ -678,7 +688,7 @@ const Medicines = () => {
           return "Image URL must use HTTP or HTTPS.";
         }
       } catch {
-        return "Please enter a valid image URL.";
+        return "The medicine image URL is invalid.";
       }
     }
 
@@ -723,7 +733,12 @@ const Medicines = () => {
         dosageForm: form.dosageForm.trim(),
         strength: form.strength.trim(),
         description: form.description.trim(),
-        imageUrl: form.imageUrl.trim() || undefined,
+
+        // Send null when the user explicitly removes the image.
+        // Existing image values remain populated when editing.
+        imageUrl: form.imageUrl.trim() || null,
+        imagePublicId: form.imagePublicId.trim() || null,
+
         barcode: form.barcode.trim() || undefined,
         reorderLevel: Number(form.reorderLevel),
         isPrescriptionRequired: Boolean(
@@ -745,7 +760,8 @@ const Medicines = () => {
         );
       }
 
-      closeForm();
+      // Force-close because saving is still true until finally runs.
+      closeForm(true);
 
       setNotice(
         editingMedicine
@@ -1621,29 +1637,20 @@ const Medicines = () => {
                       </p>
                     </div>
 
+                    {/* Cloudinary Medicine Image Upload */}
                     <div className="sm:col-span-2">
-                      <label className={labelClasses}>Image URL</label>
-                      <input
-                        name="imageUrl"
-                        type="url"
+                      <ImageUploader
                         value={form.imageUrl}
-                        onChange={handleChange}
-                        placeholder="https://example.com/medicine.png"
-                        className={inputClasses}
+                        publicId={form.imagePublicId}
+                        onChange={handleImageChange}
+                        label="Medicine Image"
                       />
 
-                      {form.imageUrl.trim() && (
-                        <div className={`${panelClasses} mt-3 p-3`}>
-                          <p className="mb-2 text-xs font-semibold text-neutral-300">
-                            Image Preview
-                          </p>
-                          <MedicineImage
-                            src={form.imageUrl.trim()}
-                            alt="Medicine preview"
-                            large
-                          />
-                        </div>
-                      )}
+                      <p className="mt-2 text-xs leading-relaxed text-neutral-400">
+                        Select an image from your device. PharmaCore uploads
+                        it securely to Cloudinary and saves its image details
+                        with the medicine record.
+                      </p>
                     </div>
 
                     <div className="sm:col-span-2">

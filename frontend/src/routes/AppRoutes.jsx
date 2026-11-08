@@ -17,6 +17,7 @@ import ProtectedRoute from "./ProtectedRoute";
 // ======================================================
 
 const ROLES = {
+  SUPERADMIN: "superadmin",
   ADMIN: "admin",
   PHARMACIST: "pharmacist",
   CASHIER: "cashier",
@@ -26,7 +27,18 @@ const ROLES = {
 
 const ALL_ROLES = Object.values(ROLES);
 
-const ADMIN_ONLY = [ROLES.ADMIN];
+const SUPERADMIN_ONLY = [
+  ROLES.SUPERADMIN,
+];
+
+const USER_APPROVAL_ROLES = [
+  ROLES.SUPERADMIN,
+  ROLES.ADMIN,
+];
+
+const ADMIN_ONLY = [
+  ROLES.ADMIN,
+];
 
 const SALES_ROLES = [
   ROLES.ADMIN,
@@ -62,45 +74,119 @@ const normalizeRole = (role) =>
     .replace(/[\s-]+/g, "_");
 
 // ======================================================
+// Role Hierarchy
+// ======================================================
+
+// Super Admin inherits System Admin permissions.
+// System Admin does not inherit Super Admin permissions.
+// All other roles retain their existing permissions.
+
+const ROLE_HIERARCHY = {
+  [ROLES.SUPERADMIN]: [
+    ROLES.SUPERADMIN,
+    ROLES.ADMIN,
+  ],
+
+  [ROLES.ADMIN]: [
+    ROLES.ADMIN,
+  ],
+
+  [ROLES.PHARMACIST]: [
+    ROLES.PHARMACIST,
+  ],
+
+  [ROLES.CASHIER]: [
+    ROLES.CASHIER,
+  ],
+
+  [ROLES.INVENTORY_MANAGER]: [
+    ROLES.INVENTORY_MANAGER,
+  ],
+
+  [ROLES.PROCUREMENT]: [
+    ROLES.PROCUREMENT,
+  ],
+};
+
+const hasRolePermission = (userRole, allowedRoles) => {
+  const normalizedUserRole = normalizeRole(userRole);
+
+  const normalizedAllowedRoles = allowedRoles.map(normalizeRole);
+
+  const inheritedRoles =
+    ROLE_HIERARCHY[normalizedUserRole] || [];
+
+  return normalizedAllowedRoles.some((role) =>
+    inheritedRoles.includes(role)
+  );
+};
+
+// ======================================================
 // Lazy-loaded Authentication Pages
 // ======================================================
 
 const Login = lazy(() => import("../pages/Login"));
+
 const SignUp = lazy(() => import("../pages/SignUp"));
+
+const SetupAdminPassword = lazy(
+  () => import("../pages/SetupAdminPassword")
+);
 
 // ======================================================
 // Lazy-loaded Application Pages
 // ======================================================
 
 const Dashboard = lazy(() => import("../pages/Dashboard"));
+
 const Medicines = lazy(() => import("../pages/Medicines"));
+
 const Inventory = lazy(() => import("../pages/Inventory"));
 
 const Purchases = lazy(() => import("../pages/Purchases"));
+
 const CreatePurchase = lazy(
   () => import("../pages/CreatePurchase")
 );
+
 const PurchaseDetails = lazy(
   () => import("../pages/PurchaseDetails")
 );
+
 const ReceivePurchase = lazy(
   () => import("../pages/ReceivePurchase")
 );
 
 const Suppliers = lazy(() => import("../pages/Suppliers"));
+
 const Sales = lazy(() => import("../pages/Sales"));
+
 const Customers = lazy(() => import("../pages/Customers"));
+
+const Doctors = lazy(() => import("../pages/Doctors"));
 
 const Prescriptions = lazy(
   () => import("../pages/Prescriptions")
 );
 
 const Analytics = lazy(() => import("../pages/Analytics"));
+
 const AuditLogs = lazy(() => import("../pages/AuditLogs"));
+
 const Settings = lazy(() => import("../pages/Settings"));
 
 const UserApprovals = lazy(
   () => import("../pages/UserApprovals")
+);
+
+// Super Admin Management
+
+const AdminManagement = lazy(
+  () => import("../pages/AdminManagement")
+);
+
+const Unauthorized = lazy(
+  () => import("../pages/Unauthorized")
 );
 
 // ======================================================
@@ -114,6 +200,7 @@ const PageLoader = () => (
     aria-live="polite"
   >
     <div className="flex flex-col items-center gap-4">
+
       <div className="relative flex h-14 w-14 items-center justify-center">
         <div className="absolute inset-0 animate-spin rounded-full border-2 border-violet-500/20 border-t-violet-500" />
 
@@ -129,6 +216,7 @@ const PageLoader = () => (
           Preparing your workspace...
         </p>
       </div>
+
     </div>
   </div>
 );
@@ -162,14 +250,13 @@ const RoleProtectedRoute = ({
   const { user } = useAuth();
 
   const userRole = normalizeRole(user?.role);
-  const permittedRoles = allowedRoles.map(normalizeRole);
 
   if (!user) {
     return <Navigate to="/login" replace />;
   }
 
-  if (!permittedRoles.includes(userRole)) {
-    return <Navigate to="/dashboard" replace />;
+  if (!hasRolePermission(userRole, allowedRoles)) {
+    return <Navigate to="/unauthorized" replace />;
   }
 
   return children;
@@ -199,11 +286,12 @@ const AppRoutes = () => {
 
       <Suspense fallback={<PageLoader />}>
         <Routes>
+
           {/* Default route */}
 
           <Route
             path="/"
-            element={<Navigate to="/login" replace />}
+            element={<Navigate to="/dashboard" replace />}
           />
 
           {/* Public authentication routes */}
@@ -218,10 +306,28 @@ const AppRoutes = () => {
             element={<SignUp />}
           />
 
+          {/* Public Admin password setup route */}
+
+          <Route
+            path="/setup-admin-password"
+            element={<SetupAdminPassword />}
+          />
+
           {/* Authenticated application */}
 
           <Route element={<ProtectedRoute />}>
+
+            {/* Unauthorized page */}
+
+            <Route
+              path="/unauthorized"
+              element={<Unauthorized />}
+            />
+
+            {/* Main application layout */}
+
             <Route element={<MainLayout />}>
+
               {/* Dashboard */}
 
               <Route
@@ -255,7 +361,7 @@ const AppRoutes = () => {
                 }
               />
 
-              {/* Purchase listing and details */}
+              {/* Purchase listing */}
 
               <Route
                 path="/purchases"
@@ -265,6 +371,8 @@ const AppRoutes = () => {
                   </ProtectedPage>
                 }
               />
+
+              {/* Purchase details */}
 
               <Route
                 path="/purchases/:id"
@@ -334,6 +442,19 @@ const AppRoutes = () => {
                 }
               />
 
+              {/* Doctors */}
+
+              <Route
+                path="/doctors"
+                element={
+                  <ProtectedPage
+                    allowedRoles={PHARMACY_ROLES}
+                  >
+                    <Doctors />
+                  </ProtectedPage>
+                }
+              />
+
               {/* Prescriptions */}
 
               <Route
@@ -360,38 +481,58 @@ const AppRoutes = () => {
                 }
               />
 
-              {/* Admin-only: user registration approvals */}
+              {/* Admin and Super Admin: User Approvals */}
 
               <Route
                 path="/user-approvals"
                 element={
-                  <ProtectedPage allowedRoles={ADMIN_ONLY}>
+                  <ProtectedPage
+                    allowedRoles={USER_APPROVAL_ROLES}
+                  >
                     <UserApprovals />
                   </ProtectedPage>
                 }
               />
 
-              {/* Admin-only: audit logs */}
+              {/* Super Admin-only: Admin Management */}
+
+              <Route
+                path="/admin-management"
+                element={
+                  <ProtectedPage
+                    allowedRoles={SUPERADMIN_ONLY}
+                  >
+                    <AdminManagement />
+                  </ProtectedPage>
+                }
+              />
+
+              {/* Admin and Super Admin: Audit Logs */}
 
               <Route
                 path="/audit-logs"
                 element={
-                  <ProtectedPage allowedRoles={ADMIN_ONLY}>
+                  <ProtectedPage
+                    allowedRoles={ADMIN_ONLY}
+                  >
                     <AuditLogs />
                   </ProtectedPage>
                 }
               />
 
-              {/* Admin-only: settings */}
+              {/* Admin and Super Admin: Settings */}
 
               <Route
                 path="/settings"
                 element={
-                  <ProtectedPage allowedRoles={ADMIN_ONLY}>
+                  <ProtectedPage
+                    allowedRoles={ADMIN_ONLY}
+                  >
                     <Settings />
                   </ProtectedPage>
                 }
               />
+
             </Route>
           </Route>
 
@@ -401,6 +542,7 @@ const AppRoutes = () => {
             path="*"
             element={<Navigate to="/login" replace />}
           />
+
         </Routes>
       </Suspense>
     </>

@@ -3,7 +3,7 @@ const saleService = require("../services/saleService");
 const { generateReceiptPdf } = require("../services/receiptService");
 
 // ======================================================
-// Helpers
+// HELPERS
 // ======================================================
 
 const logError = (context, error) => {
@@ -15,23 +15,18 @@ const logError = (context, error) => {
 
 const getRequestMeta = (req) => ({
   ipAddress: req.ip,
-  userAgent: req.get("user-agent")
+  userAgent: req.get("user-agent"),
 });
 
 const sendError = (res, error, fallbackMessage) =>
   res.status(error.statusCode || 500).json({
     success: false,
-    message: error.message || fallbackMessage
+    message: error.message || fallbackMessage,
   });
 
 // ======================================================
-// Create Sale
-// ======================================================
-//
+// CREATE SALE
 // POST /api/sales
-//
-// Response:
-//   { success: true, message, sale }
 // ======================================================
 
 const createSale = async (req, res) => {
@@ -45,7 +40,7 @@ const createSale = async (req, res) => {
     return res.status(201).json({
       success: true,
       message: "Sale created successfully.",
-      sale
+      sale,
     });
   } catch (error) {
     logError("Create sale error:", error);
@@ -55,47 +50,48 @@ const createSale = async (req, res) => {
 };
 
 // ======================================================
-// Get All Sales
+// GET ALL SALES
+// GET /api/sales
 // ======================================================
 //
-// GET /api/sales
-//
-// Response:
-//   { success: true, sales }
+// Cashiers receive only sales they personally created.
+// Other permitted roles receive the complete sales list.
 // ======================================================
 
 const getAllSales = async (req, res) => {
   try {
-    const sales = await saleService.getAllSales();
+    const sales = await saleService.getAllSales(req.user);
 
     return res.status(200).json({
       success: true,
-      sales
+      sales,
     });
   } catch (error) {
-    logError("Get all sales error:", error);
+    logError("Get sales error:", error);
 
     return sendError(res, error, "Failed to retrieve sales.");
   }
 };
 
 // ======================================================
-// Get Sale By ID
+// GET SALE BY ID
+// GET /api/sales/:id
 // ======================================================
 //
-// GET /api/sales/:id
-//
-// Response:
-//   { success: true, sale }
+// The service checks whether the requesting user owns
+// the sale when the requester is a cashier.
 // ======================================================
 
 const getSaleById = async (req, res) => {
   try {
-    const sale = await saleService.getSaleById(req.params.id);
+    const sale = await saleService.getSaleById(
+      req.params.id,
+      req.user
+    );
 
     return res.status(200).json({
       success: true,
-      sale
+      sale,
     });
   } catch (error) {
     logError("Get sale error:", error);
@@ -105,13 +101,8 @@ const getSaleById = async (req, res) => {
 };
 
 // ======================================================
-// Cancel Sale
-// ======================================================
-//
+// CANCEL SALE
 // DELETE /api/sales/:id
-//
-// Response:
-//   { success: true, message, sale }
 // ======================================================
 
 const cancelSale = async (req, res) => {
@@ -125,7 +116,7 @@ const cancelSale = async (req, res) => {
     return res.status(200).json({
       success: true,
       message: "Sale cancelled successfully and inventory restored.",
-      sale
+      sale,
     });
   } catch (error) {
     logError("Cancel sale error:", error);
@@ -135,38 +126,49 @@ const cancelSale = async (req, res) => {
 };
 
 // ======================================================
-// Download Sale Receipt (PDF)
+// DOWNLOAD SALE RECEIPT
+// GET /api/sales/:id/receipt
 // ======================================================
 //
-// GET /api/sales/:id/receipt
-//
-// Streams a PDF receipt directly to the response.
+// Cashiers can download only receipts belonging to
+// sales they personally processed.
 // ======================================================
 
 const getSaleReceipt = async (req, res) => {
   try {
-    const sale = await saleService.getSaleById(req.params.id);
+    const sale = await saleService.getSaleById(
+      req.params.id,
+      req.user
+    );
 
     const filename = `receipt-${sale.saleNumber}.pdf`;
 
     res.setHeader("Content-Type", "application/pdf");
+
     res.setHeader(
       "Content-Disposition",
       `attachment; filename="${filename}"`
     );
 
-    await generateReceiptPdf({ sale, stream: res });
+    await generateReceiptPdf({
+      sale,
+      stream: res,
+    });
   } catch (error) {
     logError("Get sale receipt error:", error);
 
     if (!res.headersSent) {
-      return sendError(res, error, "Failed to generate receipt.");
+      return sendError(
+        res,
+        error,
+        "Failed to generate receipt."
+      );
     }
   }
 };
 
 // ======================================================
-// Export
+// EXPORTS
 // ======================================================
 
 module.exports = {
@@ -174,5 +176,5 @@ module.exports = {
   getAllSales,
   getSaleById,
   cancelSale,
-  getSaleReceipt
+  getSaleReceipt,
 };

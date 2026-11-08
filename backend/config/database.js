@@ -1,11 +1,14 @@
 
 const { Sequelize } = require("sequelize");
+const fs = require("fs");
+const path = require("path");
+
 require("dotenv").config();
 
 const requiredVariables = [
   "DB_NAME",
   "DB_USER",
-  "DB_PASSWORD"
+  "DB_PASSWORD",
 ];
 
 const missingVariables = requiredVariables.filter(
@@ -14,8 +17,29 @@ const missingVariables = requiredVariables.filter(
 
 if (missingVariables.length > 0) {
   throw new Error(
-    `Missing database environment variables: ${missingVariables.join(", ")}`
+    `Missing required database environment variables: ${missingVariables.join(", ")}`
   );
+}
+
+const isProduction = process.env.NODE_ENV === "production";
+
+const dialectOptions = {
+  connectTimeout: 10000,
+};
+
+if (isProduction) {
+  const caPath = path.join(__dirname, "ca.pem");
+
+  if (!fs.existsSync(caPath)) {
+    throw new Error(
+      "Aiven CA certificate not found. Expected it at config/ca.pem"
+    );
+  }
+
+  dialectOptions.ssl = {
+    ca: fs.readFileSync(caPath, "utf8"),
+    rejectUnauthorized: true,
+  };
 }
 
 const sequelize = new Sequelize(
@@ -32,16 +56,14 @@ const sequelize = new Sequelize(
       max: 10,
       min: 0,
       acquire: 30000,
-      idle: 10000
+      idle: 10000,
     },
 
     retry: {
-      max: 2
+      max: 2,
     },
 
-    dialectOptions: {
-      connectTimeout: 10000
-    }
+    dialectOptions,
   }
 );
 

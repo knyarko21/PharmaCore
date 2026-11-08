@@ -1,176 +1,244 @@
 
-const { AuditLog, User } = require("../models");
+const { AuditLog } = require("../models");
+const { Op } = require("sequelize");
+
+// ======================================================
+// Audit Log Service
+// ======================================================
 
 // ======================================================
 // Helpers
 // ======================================================
 
-const toPositiveInteger = (value) => {
-  const numeric = Number(value);
-  return Number.isInteger(numeric) && numeric > 0 ? numeric : null;
+const normalizeText = (value) => {
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  return value.trim();
 };
 
-const toTrimmedString = (value) =>
-  typeof value === "string" && value.trim() ? value.trim() : null;
+const normalizeOptionalText = (value) => {
+  if (
+    value === undefined ||
+    value === null ||
+    value === ""
+  ) {
+    return null;
+  }
+
+  return normalizeText(String(value)) || null;
+};
+
+const normalizeId = (value, fieldName) => {
+  const id = Number(value);
+
+  if (!Number.isSafeInteger(id) || id <= 0) {
+    throw new Error(`Invalid audit log ${fieldName}.`);
+  }
+
+  return id;
+};
+
+const normalizePagination = (value, fallback) => {
+  const parsed = Number.parseInt(value, 10);
+
+  return Number.isInteger(parsed) && parsed > 0
+    ? parsed
+    : fallback;
+};
+
+// ======================================================
+// Normalize Audit Input
+// ======================================================
+
+const normalizeAuditData = (data = {}) => {
+  const userId = normalizeId(data.userId, "user ID");
+
+  const action = normalizeText(data.action);
+
+  const module = normalizeText(
+    data.module || data.entity || "general"
+  );
+
+  const description = normalizeText(
+    data.description || data.details
+  );
+
+  const entityType = normalizeOptionalText(
+    data.entityType || data.entity
+  );
+
+  let entityId = null;
+
+  if (
+    data.entityId !== undefined &&
+    data.entityId !== null
+  ) {
+    entityId = normalizeId(data.entityId, "entity ID");
+  }
+
+  if (!action) {
+    throw new Error("Audit log action is required.");
+  }
+
+  if (action.length > 100) {
+    throw new Error(
+      "Audit log action cannot exceed 100 characters."
+    );
+  }
+
+  if (!module) {
+    throw new Error("Audit log module is required.");
+  }
+
+  if (module.length > 50) {
+    throw new Error(
+      "Audit log module cannot exceed 50 characters."
+    );
+  }
+
+  if (!description) {
+    throw new Error("Audit log description is required.");
+  }
+
+  return {
+    userId,
+    action,
+    module,
+    description,
+    entityType,
+    entityId,
+    ipAddress: normalizeOptionalText(data.ipAddress),
+    userAgent: normalizeOptionalText(data.userAgent),
+  };
+};
 
 // ======================================================
 // Create Audit Log
 // ======================================================
-//
-// Called by controllers and services across the app. Never
-// throws to the caller — audit failures should not break
-// the primary action. Returns the created log, or null if
-// validation fails.
-//
-// Note: callers wrap this in try/catch today, so it's safe
-// to throw — but we validate first to keep the DB clean.
-// ======================================================
 
-const createAuditLog = async ({
-  userId,
-  action,
-  module,
-  description,
-  entityType = null,
-  entityId = null,
-  ipAddress = null,
-  userAgent = null
-}) => {
-  const numericUserId = toPositiveInteger(userId);
+const createAuditLog = async (data) => {
+  try {
+    const auditData = normalizeAuditData(data);
 
-  if (!numericUserId) {
-    throw new Error(
-      "A valid user ID is required to create an audit log."
-    );
+    const auditLog = await AuditLog.create(auditData);
+
+    return auditLog;
+  } catch (error) {
+    console.error("Audit log creation failed:", error);
+
+    // Audit failure must not interrupt an already
+    // completed business operation.
+    return null;
   }
-
-  const normalizedAction = toTrimmedString(action);
-  const normalizedModule = toTrimmedString(module);
-  const normalizedDescription = toTrimmedString(description);
-
-  if (!normalizedAction) throw new Error("Audit action is required.");
-  if (!normalizedModule) throw new Error("Audit module is required.");
-  if (!normalizedDescription) throw new Error("Audit description is required.");
-
-  const user = await User.findByPk(numericUserId);
-
-  if (!user) {
-    throw new Error("User performing this action was not found.");
-  }
-
-  return AuditLog.create({
-    userId: numericUserId,
-    action: normalizedAction.toLowerCase(),
-    module: normalizedModule.toLowerCase(),
-    description: normalizedDescription,
-    entityType: toTrimmedString(entityType),
-    entityId: entityId != null ? Number(entityId) : null,
-    ipAddress: toTrimmedString(ipAddress),
-    userAgent: toTrimmedString(userAgent)
-  });
 };
 
 // ======================================================
-// Get Audit Logs (paginated)
+// Get Audit Logs
 // ======================================================
 
 const getAuditLogs = async ({
-  page = 1,
-  limit = 20,
-  action = null,
-  module = null,
-  userId = null
+  userId,
+  action,
+  module,
+  entityType,
+  entityId,
+  limit = 100,
+  offset = 0,
 } = {}) => {
-  const currentPage = Math.max(Number(page) || 1, 1);
-  const pageSize = Math.min(Math.max(Number(limit) || 20, 1), 100);
-  const offset = (currentPage - 1) * pageSize;
-
   const where = {};
 
-  const actionFilter = toTrimmedString(action);
-  if (actionFilter) where.action = actionFilter.toLowerCase();
+  if (userId !== undefined && userId !== "") {
+    where.userId = normalizeId(userId, "user ID");
+  }
 
-  const moduleFilter = toTrimmedString(module);
-  if (moduleFilter) where.module = moduleFilter.toLowerCase();
+  if (action) {
+    where.action = normalizeText(action);
+  }
 
-  const userIdFilter = toPositiveInteger(userId);
-  if (userIdFilter) where.userId = userIdFilter;
+  if (module) {
+    where.module = normalizeText(module);
+  }
 
-  const { count, rows } = await AuditLog.findAndCountAll({
+  if (entityType) {
+    where.entityType = normalizeText(entityType);
+  }
+
+  if (entityId !== undefined && entityId !== null) {
+    where.entityId = normalizeId(entityId, "entity ID");
+  }
+
+  const safeLimit = Math.min(
+    Math.max(Number.parseInt(limit, 10) || 100, 1),
+    500
+  );
+
+  const safeOffset = Math.max(
+    Number.parseInt(offset, 10) || 0,
+    0
+  );
+
+  return AuditLog.findAndCountAll({
     where,
+    limit: safeLimit,
+    offset: safeOffset,
+    order: [["createdAt", "DESC"]],
+    distinct: true,
     include: [
       {
-        model: User,
-        as: "user",
-        attributes: ["id", "firstName", "lastName", "email", "role"]
-      }
+        association: "user",
+        attributes: [
+          "id",
+          "firstName",
+          "lastName",
+          "email",
+          "role",
+        ],
+        required: false,
+      },
     ],
-    order: [["createdAt", "DESC"]],
-    limit: pageSize,
-    offset
   });
-
-  const logs = rows.map((log) => ({
-    id: log.id,
-    action: log.action,
-    module: log.module,
-    description: log.description,
-    entityType: log.entityType,
-    entityId: log.entityId,
-    ipAddress: log.ipAddress,
-    userAgent: log.userAgent,
-    createdAt: log.createdAt,
-    user: log.user
-      ? {
-          id: log.user.id,
-          name: `${log.user.firstName} ${log.user.lastName}`,
-          email: log.user.email,
-          role: log.user.role
-        }
-      : null
-  }));
-
-  return {
-    logs,
-    pagination: {
-      page: currentPage,
-      limit: pageSize,
-      total: count,
-      totalPages: Math.ceil(count / pageSize)
-    }
-  };
 };
 
 // ======================================================
 // Get Audit Log By ID
 // ======================================================
 
-const getAuditLogById = async (auditLogId) => {
-  const numericId = toPositiveInteger(auditLogId);
+const getAuditLogById = async (id) => {
+  const auditLogId = normalizeId(id, "ID");
 
-  if (!numericId) {
-    throw new Error("Invalid audit log ID.");
-  }
-
-  const auditLog = await AuditLog.findByPk(numericId, {
+  const auditLog = await AuditLog.findByPk(auditLogId, {
     include: [
       {
-        model: User,
-        as: "user",
-        attributes: ["id", "firstName", "lastName", "email", "role"]
-      }
-    ]
+        association: "user",
+        attributes: [
+          "id",
+          "firstName",
+          "lastName",
+          "email",
+          "role",
+        ],
+        required: false,
+      },
+    ],
   });
 
   if (!auditLog) {
-    throw new Error("Audit log not found.");
+    const error = new Error("Audit log not found.");
+    error.code = "AUDIT_LOG_NOT_FOUND";
+    throw error;
   }
 
   return auditLog;
 };
 
+// ======================================================
+// Export
+// ======================================================
+
 module.exports = {
   createAuditLog,
   getAuditLogs,
-  getAuditLogById
+  getAuditLogById,
 };

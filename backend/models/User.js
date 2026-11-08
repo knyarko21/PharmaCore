@@ -1,57 +1,98 @@
 
-
 const { DataTypes } = require("sequelize");
 const sequelize = require("../config/database");
 
 const User = sequelize.define(
   "User",
   {
+    // ==========================================
+    // Primary Key
+    // ==========================================
     id: {
       type: DataTypes.INTEGER,
-      autoIncrement: true,
       primaryKey: true,
+      autoIncrement: true,
     },
 
+    // ==========================================
+    // Personal Information
+    // ==========================================
     firstName: {
-      type: DataTypes.STRING(50),
+      type: DataTypes.STRING,
       allowNull: false,
     },
 
     lastName: {
-      type: DataTypes.STRING(50),
+      type: DataTypes.STRING,
       allowNull: false,
     },
 
     email: {
-      type: DataTypes.STRING(100),
+      type: DataTypes.STRING,
       allowNull: false,
       unique: true,
       validate: {
         isEmail: true,
       },
+      set(value) {
+        this.setDataValue(
+          "email",
+          typeof value === "string"
+            ? value.trim().toLowerCase()
+            : value
+        );
+      },
     },
 
+    // ==========================================
+    // Authentication
+    // ==========================================
     password: {
-      type: DataTypes.STRING(255),
+      type: DataTypes.STRING,
       allowNull: false,
     },
 
+    // ==========================================
+    // User Role
+    // ==========================================
     role: {
-      type: DataTypes.ENUM(
-        "admin",
-        "pharmacist",
-        "cashier",
-        "inventory_manager",
-        "procurement"
-      ),
+      type: DataTypes.STRING,
       allowNull: false,
       defaultValue: "cashier",
     },
 
+    // ==========================================
+    // Requested Staff Role
+    //
+    // Stores the role selected during public
+    // registration.
+    //
+    // This does NOT grant permissions.
+    // The actual role is assigned after approval.
+    // ==========================================
+    requestedRole: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      defaultValue: null,
+      validate: {
+        isIn: [
+          [
+            "pharmacist",
+            "cashier",
+            "inventory_manager",
+            "procurement",
+          ],
+        ],
+      },
+    },
+
+    // ==========================================
+    // Account Status
+    // ==========================================
     isActive: {
       type: DataTypes.BOOLEAN,
       allowNull: false,
-      defaultValue: true,
+      defaultValue: false,
     },
 
     approvalStatus: {
@@ -63,21 +104,50 @@ const User = sequelize.define(
       allowNull: false,
       defaultValue: "pending",
     },
+
+    // ==========================================
+    // Email Verification
+    // ==========================================
+    isEmailVerified: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+    },
+
+    emailVerificationToken: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      unique: true,
+    },
+
+    emailVerificationExpiresAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
   },
+
   {
     tableName: "users",
     timestamps: true,
 
+    // ==========================================
+    // Default Scope
+    // Never expose passwords in ordinary queries.
+    // ==========================================
     defaultScope: {
       attributes: {
         exclude: ["password"],
       },
     },
 
+    // ==========================================
+    // Authentication Scope
+    // Explicitly retrieve the password when needed.
+    // ==========================================
     scopes: {
       withPassword: {
         attributes: {
-          include: ["password"],
+          exclude: [],
         },
       },
     },

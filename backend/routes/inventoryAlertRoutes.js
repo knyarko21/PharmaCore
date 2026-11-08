@@ -26,7 +26,7 @@ const router = express.Router();
 router.get(
   "/alerts",
   authenticate,
-  authorize("admin", "pharmacist", "inventory_manager"),
+  authorize("admin", "pharmacist", "inventory_manager", "procurement"),
   getInventoryAlerts
 );
 

@@ -85,7 +85,7 @@ const emptyForm = {
 // ======================================================
 
 const Customers = () => {
-  const { user } = useAuth();
+  const { user, hasRolePermission } = useAuth();
 
   const [customers, setCustomers] = useState([]);
 
@@ -105,19 +105,22 @@ const Customers = () => {
 
   const [form, setForm] = useState(emptyForm);
 
-  const canCreate =
-    user?.role === "admin" ||
-    user?.role === "pharmacist" ||
-    user?.role === "cashier";
+  const canCreate = hasRolePermission([
+    "admin",
+    "pharmacist",
+    "cashier",
+  ]);
 
-  const canEdit =
-    user?.role === "admin" ||
-    user?.role === "pharmacist" ||
-    user?.role === "cashier";
+  const canEdit = hasRolePermission([
+    "admin",
+    "pharmacist",
+    "cashier",
+  ]);
 
-  const canDeactivate =
-    user?.role === "admin" ||
-    user?.role === "pharmacist";
+  const canDeactivate = hasRolePermission([
+    "admin",
+    "pharmacist",
+  ]);
 
   const fetchCustomers = async (showSpinner = true) => {
     try {

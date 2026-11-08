@@ -3,7 +3,7 @@ const express = require("express");
 
 const {
   getAuditLogs,
-  getAuditLogById
+  getAuditLogById,
 } = require("../controllers/auditLogController");
 
 const { authenticate } = require("../middleware/authMiddleware");
@@ -12,17 +12,28 @@ const { authorize } = require("../middleware/roleMiddleware");
 const router = express.Router();
 
 // ======================================================
-// Routes
-// ======================================================
-//
-// GET /api/audit-logs      list audit logs (paginated)
-// GET /api/audit-logs/:id  fetch one audit log
-//
-// Restricted to admin only.
+// Audit Log Routes
+// Restricted to admin and superadmin
 // ======================================================
 
-router.get("/", authenticate, authorize("admin"), getAuditLogs);
+// GET /api/audit-logs
+router.get(
+  "/",
+  authenticate,
+  authorize("admin"),
+  getAuditLogs
+);
 
-router.get("/:id", authenticate, authorize("admin"), getAuditLogById);
+// GET /api/audit-logs/:id
+router.get(
+  "/:id",
+  authenticate,
+  authorize("admin"),
+  getAuditLogById
+);
+
+// ======================================================
+// Export
+// ======================================================
 
 module.exports = router;

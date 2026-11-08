@@ -27,6 +27,7 @@ import {
 } from "react";
 
 import api from "../services/api";
+import { useAuth } from "../context/AuthContext";
 
 // =========================================================
 // Helpers
@@ -292,16 +293,18 @@ const BatchCard = ({
         </div>
       )}
 
-      <div className="mt-4 border-t border-white/[0.06] pt-4">
-        <button
-          type="button"
-          onClick={() => onAdjust(batch)}
-          className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-violet-500/20 bg-violet-500/10 px-3 py-2 text-sm font-medium text-violet-300 transition-colors hover:border-violet-500/40 hover:bg-violet-500/15 hover:text-white sm:w-auto"
-        >
-          <Pencil size={15} />
-          Adjust Stock
-        </button>
-      </div>
+      {onAdjust && (
+        <div className="mt-4 border-t border-white/[0.06] pt-4">
+          <button
+            type="button"
+            onClick={() => onAdjust(batch)}
+            className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-violet-500/20 bg-violet-500/10 px-3 py-2 text-sm font-medium text-violet-300 transition-colors hover:border-violet-500/40 hover:bg-violet-500/15 hover:text-white sm:w-auto"
+          >
+            <Pencil size={15} />
+            Adjust Stock
+          </button>
+        </div>
+      )}
     </div>
   );
 };
@@ -311,6 +314,13 @@ const BatchCard = ({
 // =========================================================
 
 const Inventory = () => {
+  const { hasRolePermission } = useAuth();
+
+  const canAdjustStock = hasRolePermission([
+    "admin",
+    "inventory_manager",
+  ]);
+
   const [summary, setSummary] = useState(null);
   const [lowStock, setLowStock] = useState([]);
   const [expiringBatches, setExpiringBatches] = useState([]);
@@ -582,7 +592,9 @@ const Inventory = () => {
                 <BatchCard
                   batch={batch}
                   expiryDays={expiryDays}
-                  onAdjust={openAdjustment}
+                  onAdjust={
+                    canAdjustStock ? openAdjustment : undefined
+                  }
                 />
 
                 {batch.id === nextBatchId &&
@@ -605,6 +617,8 @@ const Inventory = () => {
   // =======================================================
 
   const openAdjustment = (batch) => {
+    if (!canAdjustStock) return;
+
     setSelectedBatch(batch);
 
     setAdjustmentForm({

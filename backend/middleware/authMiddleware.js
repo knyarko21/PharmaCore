@@ -3,29 +3,44 @@ const jwt = require("jsonwebtoken");
 const { User } = require("../models");
 
 // ======================================================
-// Helpers
+// CONFIGURATION
+// ======================================================
+
+const VALID_ROLES = [
+  "superadmin",
+  "admin",
+  "pharmacist",
+  "cashier",
+  "inventory_manager",
+  "procurement",
+];
+
+// ======================================================
+// HELPERS
 // ======================================================
 
 const logError = (context, error) => {
-  console.error("=================================");
+  console.error("================================");
   console.error(context);
   console.error(error);
-  console.error("=================================");
+  console.error("================================");
 };
 
-const sendError = (res, status, message) =>
-  res.status(status).json({
+const sendError = (res, status, message) => {
+  return res.status(status).json({
     success: false,
     message,
   });
+};
 
 // ======================================================
-// Authenticate User
+// AUTHENTICATE USER
 // ======================================================
 
 const authenticate = async (req, res, next) => {
   try {
-    // 1. Verify authentication configuration
+    // 1. Check JWT configuration
+
     if (!process.env.JWT_SECRET) {
       console.error("JWT_SECRET is not configured.");
 
@@ -37,6 +52,7 @@ const authenticate = async (req, res, next) => {
     }
 
     // 2. Read Authorization header
+
     const authHeader = req.headers.authorization;
 
     if (!authHeader) {
@@ -61,16 +77,26 @@ const authenticate = async (req, res, next) => {
       );
     }
 
+    const token = parts[1];
+
     // 3. Verify JWT
+    // Explicitly accept only HS256-signed tokens.
+
     const decoded = jwt.verify(
-      parts[1],
-      process.env.JWT_SECRET
+      token,
+      process.env.JWT_SECRET,
+      {
+        algorithms: ["HS256"],
+      }
     );
 
+    // 4. Validate JWT user ID
+
+    const userId = Number(decoded?.id);
+
     if (
-      !decoded ||
-      !decoded.id ||
-      !Number.isInteger(Number(decoded.id))
+      !Number.isSafeInteger(userId) ||
+      userId <= 0
     ) {
       return sendError(
         res,
@@ -79,9 +105,10 @@ const authenticate = async (req, res, next) => {
       );
     }
 
-    // 4. Always load the current database user.
-    // This ensures role changes take effect immediately.
-    const user = await User.findByPk(Number(decoded.id));
+    // 5. Load current user from database
+    // Database remains the source of truth.
+
+    const user = await User.findByPk(userId);
 
     if (!user) {
       return sendError(
@@ -91,7 +118,33 @@ const authenticate = async (req, res, next) => {
       );
     }
 
-    // 5. Block deactivated accounts
+    // 6. Validate user role
+
+    if (!VALID_ROLES.includes(user.role)) {
+      console.error(
+        `Invalid role detected for user ID ${user.id}:`,
+        user.role
+      );
+
+      return sendError(
+        res,
+        403,
+        "Your account has an invalid role. Contact an administrator."
+      );
+    }
+
+    // 7. Check email verification
+
+    if (!user.isEmailVerified) {
+      return sendError(
+        res,
+        403,
+        "Please verify your email address before accessing this resource."
+      );
+    }
+
+    // 8. Check account activation
+
     if (!user.isActive) {
       return sendError(
         res,
@@ -100,8 +153,20 @@ const authenticate = async (req, res, next) => {
       );
     }
 
-    // 6. Attach current, safe database user information.
-    // Approval status no longer blocks authentication.
+    // 9. Check administrator approval
+
+    if (user.approvalStatus !== "approved") {
+      return sendError(
+        res,
+        403,
+        user.approvalStatus === "pending"
+          ? "Your account is awaiting administrator approval."
+          : "Your account is not approved. Contact an administrator."
+      );
+    }
+
+    // 10. Attach safe user information to request
+
     req.user = {
       id: user.id,
       firstName: user.firstName,
@@ -110,10 +175,17 @@ const authenticate = async (req, res, next) => {
       role: user.role,
       isActive: user.isActive,
       approvalStatus: user.approvalStatus,
+      isEmailVerified: user.isEmailVerified,
     };
 
+    // 11. Continue to protected route
+
     return next();
+
   } catch (error) {
+
+    // 12. Handle JWT errors
+
     if (error.name === "TokenExpiredError") {
       return sendError(
         res,
@@ -130,6 +202,16 @@ const authenticate = async (req, res, next) => {
       );
     }
 
+    if (error.name === "NotBeforeError") {
+      return sendError(
+        res,
+        401,
+        "Authentication token is not active yet."
+      );
+    }
+
+    // 13. Handle unexpected errors
+
     logError("Authentication error:", error);
 
     return sendError(
@@ -139,6 +221,10 @@ const authenticate = async (req, res, next) => {
     );
   }
 };
+
+// ======================================================
+// EXPORTS
+// ======================================================
 
 module.exports = {
   authenticate,

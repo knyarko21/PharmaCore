@@ -6,43 +6,52 @@ const {
   getAllSales,
   getSaleById,
   cancelSale,
-  getSaleReceipt
+  getSaleReceipt,
 } = require("../controllers/saleController");
 
 const { authenticate } = require("../middleware/authMiddleware");
 const { authorize } = require("../middleware/roleMiddleware");
 const { validate } = require("../middleware/validationMiddleware");
 
-const {
-  createSaleSchema
-} = require("../validators/saleValidator");
+const { createSaleSchema } = require("../validators/saleValidator");
 
 const router = express.Router();
 
 // ======================================================
-// Middleware shortcuts
+// ROLE PERMISSIONS
 // ======================================================
 
-const saleRoles = ["admin", "pharmacist", "cashier"];
+// Roles allowed to process sales and view sales.
+// Cashier record-level restrictions are enforced
+// inside saleService.js.
+const saleRoles = [
+  "superadmin",
+  "admin",
+  "pharmacist",
+  "cashier",
+];
 
-const saleCancelRoles = ["admin", "pharmacist"];
+// Only management and pharmacists can cancel sales.
+const saleCancelRoles = [
+  "superadmin",
+  "admin",
+  "pharmacist",
+];
 
 // ======================================================
-// Routes
-// ======================================================
-//
-// GET    /api/sales              list all sales
-// GET    /api/sales/:id/receipt  download PDF receipt
-// GET    /api/sales/:id          fetch one sale
-// POST   /api/sales              create a sale
-// DELETE /api/sales/:id          cancel a sale
-//
-// IMPORTANT: /:id/receipt must be declared BEFORE /:id
-// so Express matches the more specific path first.
+// SALES ROUTES
 // ======================================================
 
-router.get("/", authenticate, authorize(...saleRoles), getAllSales);
+// GET /api/sales
+router.get(
+  "/",
+  authenticate,
+  authorize(...saleRoles),
+  getAllSales
+);
 
+// GET /api/sales/:id/receipt
+// Keep this before /:id.
 router.get(
   "/:id/receipt",
   authenticate,
@@ -50,6 +59,7 @@ router.get(
   getSaleReceipt
 );
 
+// GET /api/sales/:id
 router.get(
   "/:id",
   authenticate,
@@ -57,6 +67,7 @@ router.get(
   getSaleById
 );
 
+// POST /api/sales
 router.post(
   "/",
   authenticate,
@@ -65,6 +76,7 @@ router.post(
   createSale
 );
 
+// DELETE /api/sales/:id
 router.delete(
   "/:id",
   authenticate,

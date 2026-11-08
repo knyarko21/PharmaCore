@@ -2,58 +2,72 @@
 const express = require("express");
 const cors = require("cors");
 const path = require("path");
+
 require("dotenv").config();
 
 // ======================================================
-// Database and Models
+// DATABASE AND MODELS
 // ======================================================
 
 const sequelize = require("./config/database");
 
-// Register all Sequelize models and associations.
+// Load Sequelize models and associations.
 require("./models");
 
 // ======================================================
-// Middleware
+// MIDDLEWARE
 // ======================================================
 
 const {
   errorMiddleware,
-  notFoundMiddleware
+  notFoundMiddleware,
 } = require("./middleware/errorMiddleware");
 
 // ======================================================
-// API Routes
+// API ROUTES
 // ======================================================
 
 const authRoutes = require("./routes/authRoutes");
 const userRoutes = require("./routes/userRoutes");
+
 const dashboardRoutes = require("./routes/dashboardRoutes");
+
 const medicineRoutes = require("./routes/medicineRoutes");
 const categoryRoutes = require("./routes/categoryRoutes");
 const batchRoutes = require("./routes/batchRoutes");
+
 const supplierRoutes = require("./routes/supplierRoutes");
 const purchaseRoutes = require("./routes/purchaseRoutes");
+
 const customerRoutes = require("./routes/customerRoutes");
+const doctorRoutes = require("./routes/doctorRoutes");
 const prescriptionRoutes = require("./routes/prescriptionRoutes");
+
 const saleRoutes = require("./routes/saleRoutes");
+
 const inventoryRoutes = require("./routes/inventoryRoutes");
 const inventoryAlertRoutes = require("./routes/inventoryAlertRoutes");
+
 const analyticsRoutes = require("./routes/analyticsRoutes");
 const auditLogRoutes = require("./routes/auditLogRoutes");
 const settingsRoutes = require("./routes/settingsRoutes");
+
 const uploadRoutes = require("./routes/uploadRoutes");
 
 // ======================================================
-// Application
+// APPLICATION CONFIGURATION
 // ======================================================
 
 const app = express();
 
+// Hide Express technology information.
 app.disable("x-powered-by");
 
+// Trust one reverse proxy (Render's standard proxy setup).
+app.set("trust proxy", 1);
+
 // ======================================================
-// CORS Configuration
+// CORS CONFIGURATION
 // ======================================================
 
 const allowedOrigins = (
@@ -66,8 +80,7 @@ const allowedOrigins = (
 app.use(
   cors({
     origin(origin, callback) {
-      // Allow requests without an Origin header, such as
-      // health checks and server-to-server requests.
+      // Allow requests without an Origin header, such as health checks.
       if (!origin) {
         return callback(null, true);
       }
@@ -80,12 +93,13 @@ app.use(
 
       return callback(new Error("Origin not allowed by CORS."));
     },
-    credentials: true
+
+    credentials: true,
   })
 );
 
 // ======================================================
-// Request Parsing
+// REQUEST PARSING
 // ======================================================
 
 app.use(express.json({ limit: "1mb" }));
@@ -93,16 +107,12 @@ app.use(express.json({ limit: "1mb" }));
 app.use(
   express.urlencoded({
     extended: true,
-    limit: "1mb"
+    limit: "1mb",
   })
 );
 
 // ======================================================
-// Static Uploads
-//
-// Local filesystem uploads may not persist on Render's
-// ephemeral filesystem. Use persistent object storage
-// for files that must survive deployments or restarts.
+// STATIC FILES
 // ======================================================
 
 app.use(
@@ -111,40 +121,42 @@ app.use(
 );
 
 // ======================================================
-// Health Check
+// HEALTH CHECK
 // ======================================================
 
-app.get("/", (req, res) => {
-  res.status(200).json({
+app.get("/", (_req, res) => {
+  return res.status(200).json({
     success: true,
-    message: "PharmaCore API is running."
+    message: "PharmaCore API is running.",
   });
 });
 
 // ======================================================
-// Database Connection Management
+// DATABASE CONNECTION MANAGEMENT
 // ======================================================
 
 let databaseConnectionPromise = null;
 
-const ensureDatabaseConnection = async () => {
+async function ensureDatabaseConnection() {
   if (!databaseConnectionPromise) {
     databaseConnectionPromise = sequelize
       .authenticate()
       .catch((error) => {
+        // Allow a future request to retry if connection fails.
         databaseConnectionPromise = null;
+
         throw error;
       });
   }
 
   return databaseConnectionPromise;
-};
+}
 
-// Ensure the database is reachable before processing API
-// requests. A failed connection can be retried later.
-app.use("/api", async (req, res, next) => {
+// Check database connectivity before handling API requests.
+app.use("/api", async (_req, res, next) => {
   try {
     await ensureDatabaseConnection();
+
     return next();
   } catch (error) {
     console.error(
@@ -154,91 +166,87 @@ app.use("/api", async (req, res, next) => {
 
     return res.status(503).json({
       success: false,
-      message: "The database is temporarily unavailable."
+      message: "The database is temporarily unavailable.",
     });
   }
 });
 
 // ======================================================
-// API Route Registration
+// API ROUTE REGISTRATION
 // ======================================================
 
-// Authentication and account management
+// Authentication and user management.
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 
-// Dashboard and core pharmacy operations
+// Dashboard.
 app.use("/api/dashboard", dashboardRoutes);
+
+// Pharmacy catalogue.
 app.use("/api/medicines", medicineRoutes);
 app.use("/api/categories", categoryRoutes);
 app.use("/api/batches", batchRoutes);
+
+// Suppliers and purchasing.
 app.use("/api/suppliers", supplierRoutes);
 app.use("/api/purchases", purchaseRoutes);
+
+// Customers, doctors and prescriptions.
 app.use("/api/customers", customerRoutes);
+app.use("/api/doctors", doctorRoutes);
 app.use("/api/prescriptions", prescriptionRoutes);
+
+// Sales.
 app.use("/api/sales", saleRoutes);
 
-// Inventory
+// Inventory and alerts.
 app.use("/api/inventory", inventoryRoutes);
 app.use("/api/inventory", inventoryAlertRoutes);
 
-// Reporting and administration
+// Analytics and administration.
 app.use("/api/analytics", analyticsRoutes);
 app.use("/api/audit-logs", auditLogRoutes);
 app.use("/api/settings", settingsRoutes);
 
-// Upload management
+// File uploads.
 app.use("/api/uploads", uploadRoutes);
 
 // ======================================================
-// 404 and Central Error Handling
+// 404 AND CENTRAL ERROR HANDLING
 // ======================================================
 
+// These must remain after all registered API routes.
 app.use(notFoundMiddleware);
 app.use(errorMiddleware);
 
 // ======================================================
-// Server Startup
-//
-// Render starts the server through the package start
-// script. Vercel can import the Express app without
-// executing this local-server startup block.
+// SERVER STARTUP
 // ======================================================
 
 if (require.main === module) {
   const PORT = Number(process.env.PORT) || 5000;
 
-  const startServer = async () => {
+  async function startServer() {
+    let server;
+
     try {
+      // Establish database connectivity.
       await ensureDatabaseConnection();
 
       console.log(
         "Database connection established successfully."
       );
 
-      // Optional, deliberate schema initialization.
-      // Never enable this casually in production.
-      if (process.env.RUN_SCHEMA_SYNC === "true") {
-        if (process.env.NODE_ENV === "production") {
+      // Production must use reviewed database migrations.
+      if (process.env.NODE_ENV === "production") {
+        if (process.env.RUN_SCHEMA_SYNC === "true") {
           throw new Error(
-            "RUN_SCHEMA_SYNC must not be enabled in production. " +
-            "Use reviewed database migrations instead."
+            "RUN_SCHEMA_SYNC is prohibited in production. " +
+              "Use reviewed database migrations instead."
           );
         }
-
-        console.warn(
-          "RUN_SCHEMA_SYNC is enabled. Initializing missing tables..."
-        );
-
-        await sequelize.sync();
-
-        console.log(
-          "Database schema initialization completed."
-        );
-      }
-
-      // Synchronize models only in local development.
-      if (process.env.NODE_ENV !== "production") {
+      } else {
+        // Development synchronization only.
         await sequelize.sync();
 
         console.log(
@@ -246,32 +254,58 @@ if (require.main === module) {
         );
       }
 
-      const server = app.listen(PORT, () => {
-        console.log(
-          `PharmaCore API running on port ${PORT}.`
-        );
+      // Start HTTP server.
+      server = app.listen(PORT, () => {
+        console.log(`PharmaCore API running on port ${PORT}.`);
       });
 
-      // Graceful shutdown for local and hosted environments.
-      const shutdown = (signal) => {
+      // ==================================================
+      // GRACEFUL SHUTDOWN
+      // ==================================================
+
+      let isShuttingDown = false;
+
+      async function shutdown(signal) {
+        if (isShuttingDown) {
+          return;
+        }
+
+        isShuttingDown = true;
+
         console.log(`${signal} received. Shutting down...`);
 
-        server.close(async (serverError) => {
+        if (!server) {
+          try {
+            await sequelize.close();
+          } catch (error) {
+            console.error(
+              "Database shutdown error:",
+              error.message
+            );
+
+            process.exitCode = 1;
+          }
+
+          return;
+        }
+
+        server.close(async (error) => {
           try {
             await sequelize.close();
 
-            if (serverError) {
+            if (error) {
               console.error(
                 "HTTP server shutdown error:",
-                serverError.message
+                error.message
               );
 
               process.exitCode = 1;
-            } else {
-              console.log(
-                "PharmaCore server shut down successfully."
-              );
+              return;
             }
+
+            console.log(
+              "PharmaCore server shut down successfully."
+            );
           } catch (databaseError) {
             console.error(
               "Database shutdown error:",
@@ -281,7 +315,7 @@ if (require.main === module) {
             process.exitCode = 1;
           }
         });
-      };
+      }
 
       process.once("SIGTERM", () => shutdown("SIGTERM"));
       process.once("SIGINT", () => shutdown("SIGINT"));
@@ -293,13 +327,13 @@ if (require.main === module) {
 
       process.exitCode = 1;
     }
-  };
+  }
 
   startServer();
 }
 
 // ======================================================
-// Export Application
+// EXPORT EXPRESS APPLICATION
 // ======================================================
 
 module.exports = app;

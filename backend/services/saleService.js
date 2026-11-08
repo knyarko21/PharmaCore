@@ -1,4 +1,5 @@
 
+
 const { Op } = require("sequelize");
 
 const sequelize = require("../config/database");
@@ -67,6 +68,20 @@ const saleIncludes = [
   },
   { model: Payment, as: "payments" }
 ];
+
+// ======================================================
+// Sales Access Control
+// ======================================================
+
+// These roles can view the complete sales history.
+const SALES_VIEW_ALL_ROLES = [
+  "superadmin",
+  "admin",
+  "pharmacist"
+];
+
+const canViewAllSales = (user) =>
+  SALES_VIEW_ALL_ROLES.includes(user?.role);
 
 // ======================================================
 // Update prescription status
@@ -861,21 +876,55 @@ const createSale = async (
 // ======================================================
 // Get All Sales
 // ======================================================
+//
+// Super Admin, Admin and Pharmacist:
+//   Can view all sales.
+//
+// Cashier:
+//   Can view only sales personally created.
+//
+// ======================================================
 
-const getAllSales = async () =>
-  Sale.findAll({
+const getAllSales = async (requester) => {
+  if (!requester || !requester.id || !requester.role) {
+    throw createHttpError(
+      "Authenticated user information is required.",
+      401
+    );
+  }
+
+  const where = canViewAllSales(requester)
+    ? {}
+    : {
+        createdBy: requester.id
+      };
+
+  return Sale.findAll({
+    where,
     include: saleIncludes,
     order: [
       ["saleDate", "DESC"],
       ["id", "DESC"]
     ]
   });
+};
 
 // ======================================================
 // Get Sale By ID
 // ======================================================
+//
+// Super Admin, Admin and Pharmacist:
+//   Can retrieve any sale.
+//
+// Cashier:
+//   Can retrieve only their own sale.
+//
+// A 404 response is used for another user's sale
+// to avoid revealing whether that sale exists.
+//
+// ======================================================
 
-const getSaleById = async (id) => {
+const getSaleById = async (id, requester = null) => {
   const sale = await Sale.findByPk(id, {
     include: saleIncludes
   });
@@ -885,6 +934,27 @@ const getSaleById = async (id) => {
       "Sale not found.",
       404
     );
+  }
+
+  // HTTP controller requests provide the authenticated
+  // requester. Internal service calls may omit it.
+  if (requester) {
+    if (!requester.id || !requester.role) {
+      throw createHttpError(
+        "Authenticated user information is required.",
+        401
+      );
+    }
+
+    if (
+      !canViewAllSales(requester) &&
+      Number(sale.createdBy) !== Number(requester.id)
+    ) {
+      throw createHttpError(
+        "Sale not found.",
+        404
+      );
+    }
   }
 
   return sale;

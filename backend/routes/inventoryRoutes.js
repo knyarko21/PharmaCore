@@ -29,7 +29,8 @@ const inventoryReadRoles = [
   "admin",
   "pharmacist",
   "cashier",
-  "inventory_manager"
+  "inventory_manager",
+  "procurement",
 ];
 
 // Only authorized stock managers can manually adjust stock.

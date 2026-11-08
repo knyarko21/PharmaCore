@@ -32,6 +32,7 @@ const PURCHASE_READ_ROLES = [
   "pharmacist",
   "inventory_manager",
   "cashier",
+  "procurement",
 ];
 
 // Roles allowed to create and manage purchases.
@@ -39,6 +40,7 @@ const PURCHASE_MANAGE_ROLES = [
   "admin",
   "pharmacist",
   "inventory_manager",
+  "procurement",
 ];
 
 const PURCHASE_CANCEL_ROLES = [
