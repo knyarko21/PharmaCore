@@ -1,5 +1,4 @@
 
-
 import { useCallback, useEffect, useState } from "react";
 
 import {
@@ -195,6 +194,40 @@ const AdminManagement = () => {
       setError(getErrorMessage(err));
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  // ====================================================
+  // Resend Admin Invitation
+  // ====================================================
+
+  const handleResendInvitation = async (admin) => {
+    const confirmed = window.confirm(
+      `Resend the invitation to ${admin.email}?`
+    );
+
+    if (!confirmed) return;
+
+    setError("");
+    setSuccess("");
+
+    try {
+      setUpdatingAdminId(admin.id);
+
+      const response = await api.post(
+        `/users/admins/${admin.id}/resend-invitation`
+      );
+
+      setSuccess(
+        response.data?.message ||
+          `Invitation email sent to ${admin.email}.`
+      );
+
+      await fetchAdmins(true);
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setUpdatingAdminId(null);
     }
   };
 
@@ -623,7 +656,7 @@ const AdminManagement = () => {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[850px] text-left">
+            <table className="w-full min-w-[1050px] text-left">
               <thead>
                 <tr className="border-b border-white/[0.07] bg-white/[0.025] text-xs uppercase tracking-wider text-zinc-500">
                   <th className="px-5 py-4 font-semibold">
@@ -660,6 +693,10 @@ const AdminManagement = () => {
                     admin.approvalStatus === "approved" &&
                     admin.isEmailVerified;
 
+                  const canResendInvitation =
+                    !admin.isActive &&
+                    admin.approvalStatus === "approved";
+
                   const isUpdating =
                     updatingAdminId === admin.id;
 
@@ -681,7 +718,7 @@ const AdminManagement = () => {
                             </p>
 
                             <p className="mt-1 text-xs text-zinc-500">
-                              Administrator
+                              {admin.email}
                             </p>
                           </div>
                         </div>
@@ -719,44 +756,71 @@ const AdminManagement = () => {
                         {formatDate(admin.createdAt)}
                       </td>
 
-                      <td className="px-5 py-5 text-right">
-                        <button
-                          type="button"
-                          onClick={() => handleActivationChange(admin)}
-                          disabled={
-                            isUpdating ||
-                            (!admin.isActive && !canActivate)
-                          }
-                          title={
-                            !admin.isActive && !canActivate
-                              ? "The Admin must be approved and verify their email before activation."
-                              : admin.isActive
-                                ? "Deactivate this Admin"
-                                : "Activate this Admin"
-                          }
-                          className={`inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-40 ${
-                            admin.isActive
-                              ? "border border-red-500/20 bg-red-500/10 text-red-300 hover:bg-red-500/20"
-                              : "border border-emerald-500/20 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20"
-                          }`}
-                        >
-                          {isUpdating ? (
-                            <RefreshCw
-                              size={14}
-                              className="animate-spin"
-                            />
-                          ) : admin.isActive ? (
-                            <UserX size={14} />
-                          ) : (
-                            <UserCheck size={14} />
+                      <td className="px-5 py-5">
+                        <div className="flex items-center justify-end gap-2">
+                          {canResendInvitation && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleResendInvitation(admin)
+                              }
+                              disabled={isUpdating}
+                              title="Resend the Admin invitation or password setup email"
+                              className="inline-flex items-center justify-center gap-2 rounded-lg border border-violet-500/20 bg-violet-500/10 px-3 py-2 text-xs font-semibold text-violet-300 transition hover:bg-violet-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                              {isUpdating ? (
+                                <RefreshCw
+                                  size={14}
+                                  className="animate-spin"
+                                />
+                              ) : (
+                                <Mail size={14} />
+                              )}
+
+                              Resend Invitation
+                            </button>
                           )}
 
-                          {isUpdating
-                            ? "Updating..."
-                            : admin.isActive
-                              ? "Deactivate"
-                              : "Activate"}
-                        </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleActivationChange(admin)
+                            }
+                            disabled={
+                              isUpdating ||
+                              (!admin.isActive && !canActivate)
+                            }
+                            title={
+                              !admin.isActive && !canActivate
+                                ? "The Admin must be approved and verify their email before activation."
+                                : admin.isActive
+                                  ? "Deactivate this Admin"
+                                  : "Activate this Admin"
+                            }
+                            className={`inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-40 ${
+                              admin.isActive
+                                ? "border border-red-500/20 bg-red-500/10 text-red-300 hover:bg-red-500/20"
+                                : "border border-emerald-500/20 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20"
+                            }`}
+                          >
+                            {isUpdating ? (
+                              <RefreshCw
+                                size={14}
+                                className="animate-spin"
+                              />
+                            ) : admin.isActive ? (
+                              <UserX size={14} />
+                            ) : (
+                              <UserCheck size={14} />
+                            )}
+
+                            {isUpdating
+                              ? "Updating..."
+                              : admin.isActive
+                                ? "Deactivate"
+                                : "Activate"}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
