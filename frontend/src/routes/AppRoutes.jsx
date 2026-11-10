@@ -70,6 +70,7 @@ const ANALYTICS_ROLES = [
   ROLES.ADMIN,
   ROLES.PHARMACIST,
   ROLES.INVENTORY_MANAGER,
+  ROLES.CASHIER,
 ];
 
 // ======================================================

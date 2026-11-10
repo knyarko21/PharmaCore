@@ -26,24 +26,19 @@ import {
 // Formatting Helpers
 // ======================================================
 
-const formatCurrency = (value) => {
-  return new Intl.NumberFormat("en-GH", {
+const formatCurrency = (value) =>
+  new Intl.NumberFormat("en-GH", {
     style: "currency",
     currency: "GHS",
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(Number(value || 0));
-};
 
-const formatNumber = (value) => {
-  return new Intl.NumberFormat("en-GH").format(
-    Number(value || 0)
-  );
-};
+const formatNumber = (value) =>
+  new Intl.NumberFormat("en-GH").format(Number(value || 0));
 
-const formatPercentage = (value) => {
-  return `${Number(value || 0).toFixed(2)}%`;
-};
+const formatPercentage = (value) =>
+  `${Number(value || 0).toFixed(2)}%`;
 
 const formatDate = (dateString) => {
   if (!dateString) return "-";
@@ -118,11 +113,8 @@ const ChartTooltip = ({
           <span className="flex items-center gap-2 text-zinc-500">
             <span
               className="h-2 w-2 rounded-full"
-              style={{
-                backgroundColor: entry.color,
-              }}
+              style={{ backgroundColor: entry.color }}
             />
-
             {entry.name}
           </span>
 
@@ -166,13 +158,18 @@ const SectionHeader = ({
 );
 
 // ======================================================
-// Chart Components
+// Revenue Trend Chart
 // ======================================================
 
-const RevenueTrendChart = ({ trends }) => (
+const RevenueTrendChart = ({
+  trends,
+  isCashier,
+}) => (
   <div>
     <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-zinc-500">
-      Daily Revenue · Cost · Profit
+      {isCashier
+        ? "Daily Revenue"
+        : "Daily Revenue · Cost · Profit"}
     </p>
 
     <div className="h-[320px] rounded-2xl border border-white/[0.06] bg-black/20 p-4">
@@ -234,36 +231,44 @@ const RevenueTrendChart = ({ trends }) => (
             }}
           />
 
-          <Line
-            type="monotone"
-            dataKey="cost"
-            name="Cost"
-            stroke={COLORS.amber}
-            strokeWidth={2}
-            dot={false}
-            activeDot={{
-              r: 5,
-              fill: COLORS.amber,
-            }}
-          />
+          {!isCashier && (
+            <>
+              <Line
+                type="monotone"
+                dataKey="cost"
+                name="Cost"
+                stroke={COLORS.amber}
+                strokeWidth={2}
+                dot={false}
+                activeDot={{
+                  r: 5,
+                  fill: COLORS.amber,
+                }}
+              />
 
-          <Line
-            type="monotone"
-            dataKey="profit"
-            name="Profit"
-            stroke={COLORS.emerald}
-            strokeWidth={2.5}
-            dot={false}
-            activeDot={{
-              r: 5,
-              fill: COLORS.emerald,
-            }}
-          />
+              <Line
+                type="monotone"
+                dataKey="profit"
+                name="Profit"
+                stroke={COLORS.emerald}
+                strokeWidth={2.5}
+                dot={false}
+                activeDot={{
+                  r: 5,
+                  fill: COLORS.emerald,
+                }}
+              />
+            </>
+          )}
         </LineChart>
       </ResponsiveContainer>
     </div>
   </div>
 );
+
+// ======================================================
+// Revenue Area Chart
+// ======================================================
 
 const RevenueAreaChart = ({ trends }) => (
   <div>
@@ -295,7 +300,6 @@ const RevenueAreaChart = ({ trends }) => (
                 stopColor={COLORS.violet}
                 stopOpacity={0.5}
               />
-
               <stop
                 offset="95%"
                 stopColor={COLORS.violet}
@@ -315,7 +319,6 @@ const RevenueAreaChart = ({ trends }) => (
                 stopColor={COLORS.emerald}
                 stopOpacity={0.5}
               />
-
               <stop
                 offset="95%"
                 stopColor={COLORS.emerald}
@@ -375,6 +378,10 @@ const RevenueAreaChart = ({ trends }) => (
   </div>
 );
 
+// ======================================================
+// Units Sold Chart
+// ======================================================
+
 const UnitsSoldChart = ({ last7Days }) => {
   if (!last7Days.length) return null;
 
@@ -408,7 +415,6 @@ const UnitsSoldChart = ({ last7Days }) => {
                   stopColor={COLORS.fuchsia}
                   stopOpacity={1}
                 />
-
                 <stop
                   offset="100%"
                   stopColor={COLORS.violet}
@@ -501,8 +507,12 @@ const AnalyticsChartsContent = ({
   last7Days = [],
   salesTrends = null,
   categoryPie = [],
+  isCashier = false,
 }) => {
-  // Category revenue pie chart
+  // ====================================================
+  // Category Revenue Pie Chart
+  // ====================================================
+
   if (mode === "pie") {
     return (
       <div className="overflow-hidden rounded-3xl border border-white/[0.08] bg-white/[0.02] p-5 shadow-2xl shadow-black/40 backdrop-blur-2xl sm:p-6">
@@ -547,23 +557,16 @@ const AnalyticsChartsContent = ({
                   {categoryPie.map((entry, index) => (
                     <Cell
                       key={`cell-${index}`}
-                      fill={
-                        PIE_COLORS[
-                          index % PIE_COLORS.length
-                        ]
-                      }
+                      fill={PIE_COLORS[index % PIE_COLORS.length]}
                     />
                   ))}
                 </Pie>
 
                 <Tooltip
-                  formatter={(value) =>
-                    formatCurrency(value)
-                  }
+                  formatter={(value) => formatCurrency(value)}
                   contentStyle={{
                     background: "rgba(14, 14, 17, 0.95)",
-                    border:
-                      "1px solid rgba(255, 255, 255, 0.08)",
+                    border: "1px solid rgba(255, 255, 255, 0.08)",
                     borderRadius: "12px",
                     backdropFilter: "blur(12px)",
                     fontSize: "12px",
@@ -588,7 +591,10 @@ const AnalyticsChartsContent = ({
     );
   }
 
-  // Revenue, cost, profit and sales trend charts
+  // ====================================================
+  // Sales Trend Charts
+  // ====================================================
+
   return (
     <section className="overflow-hidden rounded-3xl border border-white/[0.08] bg-white/[0.02] p-5 shadow-2xl shadow-black/40 backdrop-blur-2xl sm:p-6">
       <SectionHeader
@@ -600,42 +606,55 @@ const AnalyticsChartsContent = ({
       />
 
       <div className="space-y-6">
-        <RevenueTrendChart trends={trends} />
+        <RevenueTrendChart
+          trends={trends}
+          isCashier={isCashier}
+        />
 
-        <RevenueAreaChart trends={trends} />
+        {!isCashier && (
+          <RevenueAreaChart trends={trends} />
+        )}
 
         <UnitsSoldChart last7Days={last7Days} />
       </div>
 
-      <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <div
+        className={`mt-6 grid gap-3 sm:grid-cols-2 ${
+          isCashier ? "lg:grid-cols-2" : "lg:grid-cols-5"
+        }`}
+      >
         <SummaryTile
           title="Revenue"
           value={formatCurrency(trendSummary.revenue)}
         />
 
-        <SummaryTile
-          title="Cost"
-          value={formatCurrency(trendSummary.cost)}
-        />
+        {!isCashier && (
+          <SummaryTile
+            title="Cost"
+            value={formatCurrency(trendSummary.cost)}
+          />
+        )}
 
-        <SummaryTile
-          title="Profit"
-          value={formatCurrency(trendSummary.profit)}
-          variant="profit"
-        />
+        {!isCashier && (
+          <SummaryTile
+            title="Profit"
+            value={formatCurrency(trendSummary.profit)}
+            variant="profit"
+          />
+        )}
 
         <SummaryTile
           title="Units Sold"
           value={formatNumber(trendSummary.unitsSold)}
         />
 
-        <SummaryTile
-          title="Margin"
-          value={formatPercentage(
-            trendSummary.profitMargin
-          )}
-          variant="margin"
-        />
+        {!isCashier && (
+          <SummaryTile
+            title="Margin"
+            value={formatPercentage(trendSummary.profitMargin)}
+            variant="margin"
+          />
+        )}
       </div>
     </section>
   );

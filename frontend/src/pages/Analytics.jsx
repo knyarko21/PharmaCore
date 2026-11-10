@@ -26,10 +26,7 @@ import {
 } from "react";
 
 import api from "../services/api";
-
-// ======================================================
-// Lazy-loaded Charts
-// ======================================================
+import { useAuth } from "../context/AuthContext";
 
 const AnalyticsCharts = lazy(() => import("./AnalyticsCharts"));
 
@@ -37,24 +34,19 @@ const AnalyticsCharts = lazy(() => import("./AnalyticsCharts"));
 // Formatting Helpers
 // ======================================================
 
-const formatCurrency = (value) => {
-  return new Intl.NumberFormat("en-GH", {
+const formatCurrency = (value) =>
+  new Intl.NumberFormat("en-GH", {
     style: "currency",
     currency: "GHS",
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(Number(value || 0));
-};
 
-const formatNumber = (value) => {
-  return new Intl.NumberFormat("en-GH").format(
-    Number(value || 0)
-  );
-};
+const formatNumber = (value) =>
+  new Intl.NumberFormat("en-GH").format(Number(value || 0));
 
-const formatPercentage = (value) => {
-  return `${Number(value || 0).toFixed(2)}%`;
-};
+const formatPercentage = (value) =>
+  `${Number(value || 0).toFixed(2)}%`;
 
 // ======================================================
 // KPI Stat Card
@@ -92,10 +84,7 @@ const StatCard = ({
   };
 
   const style = accents[accent] || accents.violet;
-
-  const valueClass = positive
-    ? style.value
-    : "text-rose-400";
+  const valueClass = positive ? style.value : "text-rose-400";
 
   return (
     <div className="relative min-w-0 overflow-hidden rounded-2xl border border-[#292932] bg-[#111116] p-4 sm:p-5">
@@ -105,9 +94,7 @@ const StatCard = ({
 
       <div className="relative flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-zinc-400">
-            {title}
-          </p>
+          <p className="text-sm font-medium text-zinc-400">{title}</p>
 
           <p
             className={`mt-2 break-words text-xl font-bold tracking-tight sm:text-2xl ${valueClass}`}
@@ -136,58 +123,51 @@ const StatCard = ({
 // Section Header
 // ======================================================
 
-const SectionHeader = ({
-  title,
-  description,
-  icon: Icon,
-}) => {
-  return (
-    <div className="mb-5 flex items-start gap-3">
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-violet-500/20 bg-[#211632] text-violet-400 sm:h-12 sm:w-12">
-        <Icon size={19} />
-      </div>
-
-      <div className="min-w-0">
-        <h2 className="text-base font-semibold text-white sm:text-lg">
-          {title}
-        </h2>
-
-        {description && (
-          <p className="mt-1 text-sm leading-5 text-zinc-500">
-            {description}
-          </p>
-        )}
-      </div>
+const SectionHeader = ({ title, description, icon: Icon }) => (
+  <div className="mb-5 flex items-start gap-3">
+    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-violet-500/20 bg-[#211632] text-violet-400 sm:h-12 sm:w-12">
+      <Icon size={19} />
     </div>
-  );
-};
+
+    <div className="min-w-0">
+      <h2 className="text-base font-semibold text-white sm:text-lg">
+        {title}
+      </h2>
+
+      {description && (
+        <p className="mt-1 text-sm leading-5 text-zinc-500">
+          {description}
+        </p>
+      )}
+    </div>
+  </div>
+);
 
 // ======================================================
 // Chart Loading Fallback
 // ======================================================
 
-const ChartLoadingFallback = () => {
-  return (
-    <div className="flex min-h-[280px] items-center justify-center rounded-2xl border border-[#292932] bg-[#111116] p-6 sm:min-h-[320px]">
-      <div className="flex flex-col items-center gap-3">
-        <Loader2
-          size={28}
-          className="animate-spin text-violet-400"
-        />
-
-        <p className="text-center text-sm text-zinc-400">
-          Loading analytics charts...
-        </p>
-      </div>
+const ChartLoadingFallback = () => (
+  <div className="flex min-h-[280px] items-center justify-center rounded-2xl border border-[#292932] bg-[#111116] p-6 sm:min-h-[320px]">
+    <div className="flex flex-col items-center gap-3">
+      <Loader2 size={28} className="animate-spin text-violet-400" />
+      <p className="text-center text-sm text-zinc-400">
+        Loading analytics charts...
+      </p>
     </div>
-  );
-};
+  </div>
+);
 
 // ======================================================
 // Analytics Component
 // ======================================================
 
 const Analytics = () => {
+  const { user } = useAuth();
+
+  const isCashier =
+    String(user?.role || "").trim().toLowerCase() === "cashier";
+
   const [salesAnalytics, setSalesAnalytics] = useState(null);
   const [salesTrends, setSalesTrends] = useState(null);
   const [topSelling, setTopSelling] = useState(null);
@@ -212,14 +192,9 @@ const Analytics = () => {
     ]);
 
     return {
-      salesAnalytics:
-        salesResponse.data?.analytics || null,
-
-      salesTrends:
-        trendsResponse.data || null,
-
-      topSelling:
-        topSellingResponse.data || null,
+      salesAnalytics: salesResponse.data?.analytics || null,
+      salesTrends: trendsResponse.data || null,
+      topSelling: topSellingResponse.data || null,
     };
   }, []);
 
@@ -245,10 +220,7 @@ const Analytics = () => {
       } catch (err) {
         if (!mounted) return;
 
-        console.error(
-          "Failed to load analytics:",
-          err
-        );
+        console.error("Failed to load analytics:", err);
 
         setError(
           err?.response?.data?.message ||
@@ -285,10 +257,7 @@ const Analytics = () => {
       setSalesTrends(data.salesTrends);
       setTopSelling(data.topSelling);
     } catch (err) {
-      console.error(
-        "Failed to refresh analytics:",
-        err
-      );
+      console.error("Failed to refresh analytics:", err);
 
       setError(
         err?.response?.data?.message ||
@@ -419,11 +388,8 @@ const Analytics = () => {
           >
             <RefreshCw
               size={16}
-              className={
-                refreshing ? "animate-spin" : ""
-              }
+              className={refreshing ? "animate-spin" : ""}
             />
-
             {refreshing ? "Retrying..." : "Try again"}
           </button>
         </div>
@@ -445,22 +411,18 @@ const Analytics = () => {
               <span className="inline-flex h-6 w-6 items-center justify-center rounded-lg border border-violet-500/20 bg-[#211632]">
                 <BarChart3 size={13} />
               </span>
-
               Business Intelligence
             </div>
 
             <h1 className="mt-3 flex flex-wrap items-center gap-2 text-2xl font-bold tracking-tight text-white sm:text-3xl">
               Analytics
-
-              <Sparkles
-                size={19}
-                className="text-violet-400"
-              />
+              <Sparkles size={19} className="text-violet-400" />
             </h1>
 
             <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-400">
-              Monitor pharmacy sales, profitability, and
-              medicine performance.
+              {isCashier
+                ? "Monitor pharmacy sales, revenue, and medicine performance."
+                : "Monitor pharmacy sales, profitability, and medicine performance."}
             </p>
           </div>
 
@@ -472,11 +434,8 @@ const Analytics = () => {
           >
             <RefreshCw
               size={16}
-              className={
-                refreshing ? "animate-spin" : ""
-              }
+              className={refreshing ? "animate-spin" : ""}
             />
-
             {refreshing ? "Refreshing..." : "Refresh"}
           </button>
         </header>
@@ -484,17 +443,17 @@ const Analytics = () => {
         {/* Today's Performance */}
         <section>
           <div className="mb-4 flex items-center gap-2">
-            <Clock3
-              size={17}
-              className="text-violet-400"
-            />
-
+            <Clock3 size={17} className="text-violet-400" />
             <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-300">
               Today's performance
             </h2>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div
+            className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${
+              isCashier ? "xl:grid-cols-3" : "xl:grid-cols-4"
+            }`}
+          >
             <StatCard
               title="Today's Revenue"
               value={formatCurrency(today.revenue)}
@@ -504,14 +463,16 @@ const Analytics = () => {
               positive={Number(today.revenue) >= 0}
             />
 
-            <StatCard
-              title="Today's Profit"
-              value={formatCurrency(today.profit)}
-              subtitle={`${formatPercentage(today.profitMargin)} margin`}
-              icon={TrendingUp}
-              positive={Number(today.profit) >= 0}
-              accent="emerald"
-            />
+            {!isCashier && (
+              <StatCard
+                title="Today's Profit"
+                value={formatCurrency(today.profit)}
+                subtitle={`${formatPercentage(today.profitMargin)} margin`}
+                icon={TrendingUp}
+                positive={Number(today.profit) >= 0}
+                accent="emerald"
+              />
+            )}
 
             <StatCard
               title="Units Sold"
@@ -536,17 +497,17 @@ const Analytics = () => {
         {/* Monthly Performance */}
         <section>
           <div className="mb-4 flex items-center gap-2">
-            <CalendarDays
-              size={17}
-              className="text-violet-400"
-            />
-
+            <CalendarDays size={17} className="text-violet-400" />
             <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-300">
               Current month
             </h2>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div
+            className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${
+              isCashier ? "xl:grid-cols-2" : "xl:grid-cols-4"
+            }`}
+          >
             <StatCard
               title="Monthly Revenue"
               value={formatCurrency(month.revenue)}
@@ -556,14 +517,16 @@ const Analytics = () => {
               positive={Number(month.revenue) >= 0}
             />
 
-            <StatCard
-              title="Monthly Profit"
-              value={formatCurrency(month.profit)}
-              subtitle={`${formatPercentage(month.profitMargin)} margin`}
-              icon={Coins}
-              positive={Number(month.profit) >= 0}
-              accent="emerald"
-            />
+            {!isCashier && (
+              <StatCard
+                title="Monthly Profit"
+                value={formatCurrency(month.profit)}
+                subtitle={`${formatPercentage(month.profitMargin)} margin`}
+                icon={Coins}
+                positive={Number(month.profit) >= 0}
+                accent="emerald"
+              />
+            )}
 
             <StatCard
               title="Monthly Units"
@@ -574,14 +537,16 @@ const Analytics = () => {
               positive
             />
 
-            <StatCard
-              title="Monthly Cost"
-              value={formatCurrency(month.cost)}
-              subtitle="Estimated purchase cost"
-              icon={TrendingDown}
-              positive={false}
-              accent="amber"
-            />
+            {!isCashier && (
+              <StatCard
+                title="Monthly Cost"
+                value={formatCurrency(month.cost)}
+                subtitle="Estimated purchase cost"
+                icon={TrendingDown}
+                positive={false}
+                accent="amber"
+              />
+            )}
           </div>
         </section>
 
@@ -594,6 +559,7 @@ const Analytics = () => {
               trendSummary={trendSummary}
               last7Days={last7Days}
               salesTrends={salesTrends}
+              isCashier={isCashier}
             />
           </Suspense>
         </section>
@@ -652,10 +618,7 @@ const Analytics = () => {
               <div className="flex min-h-[220px] items-center justify-center rounded-xl border border-dashed border-[#34343e] bg-[#0c0c10] p-5">
                 <div className="max-w-sm text-center">
                   <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-xl border border-[#30303a] bg-[#15151b]">
-                    <Package
-                      size={26}
-                      className="text-zinc-500"
-                    />
+                    <Package size={26} className="text-zinc-500" />
                   </div>
 
                   <p className="mt-3 text-sm font-semibold text-zinc-300">
@@ -663,14 +626,13 @@ const Analytics = () => {
                   </p>
 
                   <p className="mt-2 text-xs leading-5 text-zinc-500">
-                    Top-selling medicines will appear here
-                    after completed sales.
+                    Top-selling medicines will appear here after completed sales.
                   </p>
                 </div>
               </div>
             ) : (
               <div className="overflow-x-auto rounded-xl border border-[#292932]">
-                <table className="w-full min-w-[650px] border-collapse text-left">
+                <table className="w-full min-w-[520px] border-collapse text-left">
                   <thead>
                     <tr className="border-b border-[#292932] bg-[#18181f]">
                       <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
@@ -689,9 +651,11 @@ const Analytics = () => {
                         Revenue
                       </th>
 
-                      <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
-                        Profit
-                      </th>
+                      {!isCashier && (
+                        <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
+                          Profit
+                        </th>
+                      )}
                     </tr>
                   </thead>
 
@@ -731,9 +695,11 @@ const Analytics = () => {
                           {formatCurrency(medicine.revenue)}
                         </td>
 
-                        <td className="whitespace-nowrap px-4 py-4 text-right text-sm font-semibold text-emerald-400">
-                          {formatCurrency(medicine.profit)}
-                        </td>
+                        {!isCashier && (
+                          <td className="whitespace-nowrap px-4 py-4 text-right text-sm font-semibold text-emerald-400">
+                            {formatCurrency(medicine.profit)}
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
@@ -755,13 +721,10 @@ const Analytics = () => {
 
         {/* Footer */}
         <footer className="flex flex-col gap-3 border-t border-[#292932] pt-5 text-xs text-zinc-500 sm:flex-row sm:items-center sm:justify-between">
-          <p>
-            Analytics are calculated from completed sales.
-          </p>
+          <p>Analytics are calculated from completed sales.</p>
 
           <div className="flex items-center gap-2">
             <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-400" />
-
             <span>Data synced with PharmaCore</span>
           </div>
         </footer>
