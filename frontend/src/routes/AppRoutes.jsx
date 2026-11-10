@@ -57,6 +57,14 @@ const INVENTORY_ROLES = [
   ROLES.PROCUREMENT,
 ];
 
+// Roles allowed to create purchases.
+const PURCHASE_ROLES = [
+  ROLES.ADMIN,
+  ROLES.PHARMACIST,
+  ROLES.INVENTORY_MANAGER,
+  ROLES.PROCUREMENT,
+];
+
 const ANALYTICS_ROLES = [
   ROLES.ADMIN,
   ROLES.PHARMACIST,
@@ -389,7 +397,7 @@ const AppRoutes = () => {
                 path="/purchases/create"
                 element={
                   <ProtectedPage
-                    allowedRoles={INVENTORY_ROLES}
+                    allowedRoles={PURCHASE_ROLES}
                   >
                     <CreatePurchase />
                   </ProtectedPage>
