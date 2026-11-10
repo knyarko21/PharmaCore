@@ -1,5 +1,4 @@
 
-
 const express = require("express");
 
 const {
@@ -35,14 +34,16 @@ const PURCHASE_READ_ROLES = [
   "procurement",
 ];
 
-// Roles allowed to create and manage purchases.
+// Roles allowed to create, manage and receive purchases.
 const PURCHASE_MANAGE_ROLES = [
   "admin",
   "pharmacist",
   "inventory_manager",
+  "cashier",
   "procurement",
 ];
 
+// Roles allowed to cancel purchases.
 const PURCHASE_CANCEL_ROLES = [
   "admin",
   "inventory_manager",
