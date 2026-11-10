@@ -1,4 +1,5 @@
 
+
 // ===============================================
 // PharmaCore - Validation Middleware
 // ===============================================
@@ -9,7 +10,7 @@ const validate = (schema) => {
       // Validate and parse the request body.
       const validatedData = await schema.parseAsync(req.body);
 
-      // Replace the request body with validated data.
+      // Replace request body with validated data.
       req.body = validatedData;
 
       return next();
@@ -26,8 +27,13 @@ const validate = (schema) => {
               : "request",
           message: issue.message,
           code: issue.code,
-          received: issue.received ?? null
+          received: issue.received ?? null,
         }));
+
+        // Create a readable message for the frontend.
+        const detailedMessage = errors
+          .map((item) => `${item.field}: ${item.message}`)
+          .join("; ");
 
         console.error(
           "Validation failed:",
@@ -36,12 +42,12 @@ const validate = (schema) => {
 
         return res.status(400).json({
           success: false,
-          message: "Validation failed.",
-          errors
+          message: `Validation failed: ${detailedMessage}`,
+          errors,
         });
       }
 
-      // Log unexpected validation middleware errors.
+      // Handle unexpected errors.
       console.error(
         "Unexpected validation middleware error:",
         error
@@ -49,7 +55,7 @@ const validate = (schema) => {
 
       return res.status(500).json({
         success: false,
-        message: "An unexpected validation error occurred."
+        message: "An unexpected validation error occurred.",
       });
     }
   };
@@ -60,5 +66,5 @@ const validate = (schema) => {
 // ===============================================
 
 module.exports = {
-  validate
+  validate,
 };
