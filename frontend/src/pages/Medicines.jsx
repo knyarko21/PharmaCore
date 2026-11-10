@@ -197,12 +197,6 @@ const getErrorMessage = (error, fallback) => {
   return fallback;
 };
 
-const getRole = (role) =>
-  String(role || "")
-    .trim()
-    .toLowerCase()
-    .replace(/[\s-]+/g, "_");
-
 // ======================================================
 // Reusable Components
 // ======================================================
@@ -269,7 +263,8 @@ const StockBadge = ({ status, quantity }) => {
   return (
     <span
       className={`inline-flex max-w-full flex-wrap items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold ${
-        styles[status] || "border-[#3A3A49] bg-[#292936] text-neutral-300"
+        styles[status] ||
+        "border-[#3A3A49] bg-[#292936] text-neutral-300"
       }`}
     >
       <span>{Number(quantity || 0)} units</span>
@@ -284,10 +279,11 @@ const StockBadge = ({ status, quantity }) => {
 // ======================================================
 
 const Medicines = () => {
-  const { user, hasRolePermission } = useAuth();
+  const { hasRolePermission } = useAuth();
 
   // Super Admin inherits Admin operational permissions.
   // Cashiers retain view-only access.
+
   const canViewMedicines = hasRolePermission([
     "admin",
     "pharmacist",
@@ -578,8 +574,8 @@ const Medicines = () => {
   const handleImageChange = (url, publicId) => {
     setForm((current) => ({
       ...current,
-      imageUrl: url,
-      imagePublicId: publicId,
+      imageUrl: url || "",
+      imagePublicId: publicId || "",
     }));
 
     if (formError) setFormError("");
@@ -734,10 +730,10 @@ const Medicines = () => {
         strength: form.strength.trim(),
         description: form.description.trim(),
 
-        // Send null when the user explicitly removes the image.
-        // Existing image values remain populated when editing.
-        imageUrl: form.imageUrl.trim() || null,
-        imagePublicId: form.imagePublicId.trim() || null,
+        // Empty image fields must be sent as empty strings.
+        // The backend normalizes them to null before saving.
+        imageUrl: form.imageUrl.trim() || "",
+        imagePublicId: form.imagePublicId.trim() || "",
 
         barcode: form.barcode.trim() || undefined,
         reorderLevel: Number(form.reorderLevel),
@@ -760,7 +756,6 @@ const Medicines = () => {
         );
       }
 
-      // Force-close because saving is still true until finally runs.
       closeForm(true);
 
       setNotice(
@@ -871,8 +866,9 @@ const Medicines = () => {
           </h1>
 
           <p className="mt-2 text-sm leading-relaxed text-neutral-300">
-            Your account does not have permission to view the medicine catalog.
-            Contact your administrator if you believe this is an error.
+            Your account does not have permission to view the medicine
+            catalog. Contact your administrator if you believe this is
+            an error.
           </p>
         </div>
       </div>
@@ -907,7 +903,9 @@ const Medicines = () => {
   return (
     <div className="relative min-h-screen min-w-0 overflow-x-clip bg-[#171721] pb-10 text-white">
       <div className="space-y-5 sm:space-y-7">
+
         {/* Header */}
+
         <section className={`${cardClasses} relative overflow-hidden p-4 sm:p-7`}>
           <div className="pointer-events-none absolute -right-12 -top-12 h-64 w-64 rounded-full bg-violet-500/[0.07] blur-3xl" />
 
@@ -926,8 +924,8 @@ const Medicines = () => {
               </h1>
 
               <p className="mt-2 max-w-xl text-sm leading-relaxed text-neutral-300">
-                Search medicine records, monitor stock status, and review
-                pharmaceutical product information.
+                Search medicine records, monitor stock status, and
+                review pharmaceutical product information.
               </p>
 
               {!canManageMedicines && (
@@ -967,6 +965,7 @@ const Medicines = () => {
         </section>
 
         {/* Notifications */}
+
         {error && (
           <div
             role="alert"
@@ -994,6 +993,7 @@ const Medicines = () => {
           >
             <CheckCircle2 size={18} className="mt-0.5 shrink-0" />
             <span className="break-words">{notice}</span>
+
             <button
               type="button"
               onClick={() => setNotice("")}
@@ -1006,6 +1006,7 @@ const Medicines = () => {
         )}
 
         {/* Summary Cards */}
+
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
           {[
             {
@@ -1063,6 +1064,7 @@ const Medicines = () => {
         </div>
 
         {/* Search and Filters */}
+
         <section className={`${cardClasses} p-3 sm:p-5`}>
           <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_16rem_14rem]">
             <div className="relative min-w-0">
@@ -1087,6 +1089,7 @@ const Medicines = () => {
               aria-label="Filter by category"
             >
               <option value="all">All Categories</option>
+
               {categories.map((category) => (
                 <option key={category.id} value={String(category.id)}>
                   {category.name}
@@ -1111,6 +1114,7 @@ const Medicines = () => {
         </section>
 
         {/* Catalog */}
+
         <section className={`${cardClasses} min-w-0 overflow-hidden`}>
           <div className="flex flex-col justify-between gap-3 border-b border-[#373744] p-4 sm:flex-row sm:items-center sm:p-6">
             <div>
@@ -1156,6 +1160,7 @@ const Medicines = () => {
           ) : (
             <>
               {/* Mobile Cards */}
+
               <div className="grid gap-3 p-3 md:hidden">
                 {filteredMedicines.map((medicine) => {
                   const stock = getStockInfo(medicine.id);
@@ -1197,6 +1202,7 @@ const Medicines = () => {
                           <p className="text-[10px] font-bold uppercase text-neutral-400">
                             Dosage / Strength
                           </p>
+
                           <p className="mt-1 break-words text-xs font-medium">
                             {medicine.dosageForm || "—"}
                             {medicine.strength ? ` · ${medicine.strength}` : ""}
@@ -1207,6 +1213,7 @@ const Medicines = () => {
                           <p className="text-[10px] font-bold uppercase text-neutral-400">
                             SKU
                           </p>
+
                           <p className="mt-1 break-all font-mono text-xs">
                             {medicine.sku || "—"}
                           </p>
@@ -1216,6 +1223,7 @@ const Medicines = () => {
                           <p className="text-[10px] font-bold uppercase text-neutral-400">
                             Current Stock
                           </p>
+
                           <div className="mt-1">
                             <StockBadge
                               status={stock.stockStatus}
@@ -1228,6 +1236,7 @@ const Medicines = () => {
                           <p className="text-[10px] font-bold uppercase text-neutral-400">
                             Prescription
                           </p>
+
                           <span
                             className={`mt-1 inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${
                               medicine.isPrescriptionRequired
@@ -1285,6 +1294,7 @@ const Medicines = () => {
               </div>
 
               {/* Desktop Table */}
+
               <div className="hidden overflow-x-auto md:block">
                 <table className="w-full min-w-[950px] text-left">
                   <thead className="bg-[#292936]">
@@ -1328,6 +1338,7 @@ const Medicines = () => {
                                 <p className="font-semibold">
                                   {medicine.name}
                                 </p>
+
                                 <p className="mt-1 text-xs text-neutral-400">
                                   {medicine.genericName || medicine.brandName || "—"}
                                 </p>
@@ -1343,6 +1354,7 @@ const Medicines = () => {
                             <p className="text-sm">
                               {medicine.dosageForm || "—"}
                             </p>
+
                             <p className="mt-1 text-xs text-neutral-400">
                               {medicine.strength || "Not specified"}
                             </p>
@@ -1484,7 +1496,9 @@ const Medicines = () => {
                   )}
 
                   <div className="grid gap-4 sm:grid-cols-2">
+
                     {/* Medicine Name */}
+
                     <div className="relative sm:col-span-2">
                       <label className={labelClasses}>
                         Medicine Name *
@@ -1516,6 +1530,7 @@ const Medicines = () => {
                               <span className="block text-sm font-semibold">
                                 {suggestion.name}
                               </span>
+
                               <span className="mt-1 block text-xs text-neutral-400">
                                 {suggestion.dosageForm} {suggestion.strength}
                                 {suggestion.brandName
@@ -1529,7 +1544,10 @@ const Medicines = () => {
                     </div>
 
                     <div>
-                      <label className={labelClasses}>Generic Name</label>
+                      <label className={labelClasses}>
+                        Generic Name
+                      </label>
+
                       <input
                         name="genericName"
                         value={form.genericName}
@@ -1540,7 +1558,10 @@ const Medicines = () => {
                     </div>
 
                     <div>
-                      <label className={labelClasses}>Brand Name</label>
+                      <label className={labelClasses}>
+                        Brand Name
+                      </label>
+
                       <input
                         name="brandName"
                         value={form.brandName}
@@ -1551,7 +1572,10 @@ const Medicines = () => {
                     </div>
 
                     <div>
-                      <label className={labelClasses}>Category *</label>
+                      <label className={labelClasses}>
+                        Category *
+                      </label>
+
                       <select
                         name="categoryId"
                         value={form.categoryId}
@@ -1560,6 +1584,7 @@ const Medicines = () => {
                         className={selectClasses}
                       >
                         <option value="">Select category</option>
+
                         {categories.map((category) => (
                           <option
                             key={category.id}
@@ -1572,7 +1597,10 @@ const Medicines = () => {
                     </div>
 
                     <div>
-                      <label className={labelClasses}>Dosage Form *</label>
+                      <label className={labelClasses}>
+                        Dosage Form *
+                      </label>
+
                       <input
                         name="dosageForm"
                         value={form.dosageForm}
@@ -1584,7 +1612,10 @@ const Medicines = () => {
                     </div>
 
                     <div>
-                      <label className={labelClasses}>Strength</label>
+                      <label className={labelClasses}>
+                        Strength
+                      </label>
+
                       <input
                         name="strength"
                         value={form.strength}
@@ -1595,20 +1626,27 @@ const Medicines = () => {
                     </div>
 
                     <div>
-                      <label className={labelClasses}>SKU</label>
+                      <label className={labelClasses}>
+                        SKU
+                      </label>
+
                       <input
                         value={editingMedicine?.sku || ""}
                         readOnly
                         placeholder="Generated automatically"
                         className={`${inputClasses} cursor-not-allowed opacity-80`}
                       />
+
                       <p className="mt-2 text-xs text-neutral-400">
                         PharmaCore generates the SKU when a medicine is saved.
                       </p>
                     </div>
 
                     <div>
-                      <label className={labelClasses}>Barcode</label>
+                      <label className={labelClasses}>
+                        Barcode
+                      </label>
+
                       <input
                         name="barcode"
                         value={form.barcode}
@@ -1622,6 +1660,7 @@ const Medicines = () => {
                       <label className={labelClasses}>
                         Reorder Level *
                       </label>
+
                       <input
                         name="reorderLevel"
                         type="number"
@@ -1632,12 +1671,14 @@ const Medicines = () => {
                         required
                         className={inputClasses}
                       />
+
                       <p className="mt-2 text-xs text-neutral-400">
                         Receive a low-stock alert when stock reaches this level.
                       </p>
                     </div>
 
                     {/* Cloudinary Medicine Image Upload */}
+
                     <div className="sm:col-span-2">
                       <ImageUploader
                         value={form.imageUrl}
@@ -1657,6 +1698,7 @@ const Medicines = () => {
                       <label className={labelClasses}>
                         Description / Clinical Notes
                       </label>
+
                       <textarea
                         name="description"
                         value={form.description}
@@ -1682,9 +1724,10 @@ const Medicines = () => {
                         <span className="block text-sm font-semibold">
                           Prescription Required
                         </span>
+
                         <span className="mt-1 block text-xs leading-relaxed text-neutral-400">
-                          Mark this medicine as requiring a prescription before
-                          dispensing.
+                          Mark this medicine as requiring a prescription
+                          before dispensing.
                         </span>
                       </span>
                     </label>
@@ -1711,6 +1754,7 @@ const Medicines = () => {
                     ) : (
                       <CheckCircle2 size={17} />
                     )}
+
                     {saving
                       ? "Saving..."
                       : editingMedicine
@@ -1745,6 +1789,7 @@ const Medicines = () => {
                   <p className="text-xs font-semibold uppercase tracking-wider text-violet-300">
                     Medicine Record
                   </p>
+
                   <h2 className="mt-1 text-xl font-bold">
                     Medicine Details
                   </h2>
@@ -1798,6 +1843,7 @@ const Medicines = () => {
                     <p className="text-xs font-semibold uppercase text-neutral-400">
                       SKU
                     </p>
+
                     <p className="mt-2 break-all font-mono text-sm">
                       {selectedMedicine.sku || "Not assigned"}
                     </p>
@@ -1807,6 +1853,7 @@ const Medicines = () => {
                     <p className="text-xs font-semibold uppercase text-neutral-400">
                       Barcode
                     </p>
+
                     <p className="mt-2 break-all font-mono text-sm">
                       {selectedMedicine.barcode || "Not assigned"}
                     </p>
@@ -1816,6 +1863,7 @@ const Medicines = () => {
                     <p className="text-xs font-semibold uppercase text-neutral-400">
                       Prescription
                     </p>
+
                     <p className="mt-2 text-sm font-semibold">
                       {selectedMedicine.isPrescriptionRequired
                         ? "Prescription required"
@@ -1827,6 +1875,7 @@ const Medicines = () => {
                     <p className="text-xs font-semibold uppercase text-neutral-400">
                       Reorder Level
                     </p>
+
                     <p className="mt-2 text-sm font-semibold">
                       {selectedMedicine.reorderLevel ?? 10} units
                     </p>
@@ -1838,6 +1887,7 @@ const Medicines = () => {
                     <h3 className="text-xs font-semibold uppercase text-neutral-400">
                       Description / Clinical Notes
                     </h3>
+
                     <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed text-neutral-200">
                       {selectedMedicine.description}
                     </p>
@@ -1858,6 +1908,7 @@ const Medicines = () => {
                           <p className="text-xs text-neutral-400">
                             Current Stock
                           </p>
+
                           <p className="mt-2 text-xl font-black">
                             {stock.currentStock} units
                           </p>
@@ -1867,6 +1918,7 @@ const Medicines = () => {
                           <p className="text-xs text-neutral-400">
                             Inventory Value
                           </p>
+
                           <p className="mt-2 break-words text-base font-bold">
                             {formatCurrency(stock.inventoryValue)}
                           </p>
@@ -1876,6 +1928,7 @@ const Medicines = () => {
                           <p className="text-xs text-neutral-400">
                             Potential Profit
                           </p>
+
                           <p className="mt-2 break-words text-base font-bold text-emerald-300">
                             {formatCurrency(stock.potentialProfit)}
                           </p>
