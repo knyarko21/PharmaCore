@@ -1,4 +1,5 @@
 
+
 import { lazy, Suspense, useEffect } from "react";
 
 import {
@@ -64,6 +65,7 @@ const PURCHASE_ROLES = [
   ROLES.PHARMACIST,
   ROLES.INVENTORY_MANAGER,
   ROLES.PROCUREMENT,
+  ROLES.CASHIER,
 ];
 
 const ANALYTICS_ROLES = [
@@ -86,10 +88,6 @@ const normalizeRole = (role) =>
 // ======================================================
 // Role Hierarchy
 // ======================================================
-
-// Super Admin inherits System Admin permissions.
-// System Admin does not inherit Super Admin permissions.
-// All other roles retain their existing permissions.
 
 const ROLE_HIERARCHY = {
   [ROLES.SUPERADMIN]: [
@@ -210,7 +208,6 @@ const PageLoader = () => (
     aria-live="polite"
   >
     <div className="flex flex-col items-center gap-4">
-
       <div className="relative flex h-14 w-14 items-center justify-center">
         <div className="absolute inset-0 animate-spin rounded-full border-2 border-violet-500/20 border-t-violet-500" />
 
@@ -226,7 +223,6 @@ const PageLoader = () => (
           Preparing your workspace...
         </p>
       </div>
-
     </div>
   </div>
 );
@@ -296,7 +292,6 @@ const AppRoutes = () => {
 
       <Suspense fallback={<PageLoader />}>
         <Routes>
-
           {/* Default route */}
 
           <Route
@@ -326,7 +321,6 @@ const AppRoutes = () => {
           {/* Authenticated application */}
 
           <Route element={<ProtectedRoute />}>
-
             {/* Unauthorized page */}
 
             <Route
@@ -337,7 +331,6 @@ const AppRoutes = () => {
             {/* Main application layout */}
 
             <Route element={<MainLayout />}>
-
               {/* Dashboard */}
 
               <Route
@@ -398,9 +391,7 @@ const AppRoutes = () => {
               <Route
                 path="/purchases/create"
                 element={
-                  <ProtectedPage
-                    allowedRoles={PURCHASE_ROLES}
-                  >
+                  <ProtectedPage allowedRoles={PURCHASE_ROLES}>
                     <CreatePurchase />
                   </ProtectedPage>
                 }
@@ -411,9 +402,7 @@ const AppRoutes = () => {
               <Route
                 path="/purchases/:id/receive"
                 element={
-                  <ProtectedPage
-                    allowedRoles={PURCHASE_ROLES}
-                  >
+                  <ProtectedPage allowedRoles={PURCHASE_ROLES}>
                     <ReceivePurchase />
                   </ProtectedPage>
                 }
@@ -457,9 +446,7 @@ const AppRoutes = () => {
               <Route
                 path="/doctors"
                 element={
-                  <ProtectedPage
-                    allowedRoles={PHARMACY_ROLES}
-                  >
+                  <ProtectedPage allowedRoles={PHARMACY_ROLES}>
                     <Doctors />
                   </ProtectedPage>
                 }
@@ -470,9 +457,7 @@ const AppRoutes = () => {
               <Route
                 path="/prescriptions"
                 element={
-                  <ProtectedPage
-                    allowedRoles={PHARMACY_ROLES}
-                  >
+                  <ProtectedPage allowedRoles={PHARMACY_ROLES}>
                     <Prescriptions />
                   </ProtectedPage>
                 }
@@ -483,9 +468,7 @@ const AppRoutes = () => {
               <Route
                 path="/analytics"
                 element={
-                  <ProtectedPage
-                    allowedRoles={ANALYTICS_ROLES}
-                  >
+                  <ProtectedPage allowedRoles={ANALYTICS_ROLES}>
                     <Analytics />
                   </ProtectedPage>
                 }
@@ -496,9 +479,7 @@ const AppRoutes = () => {
               <Route
                 path="/user-approvals"
                 element={
-                  <ProtectedPage
-                    allowedRoles={USER_APPROVAL_ROLES}
-                  >
+                  <ProtectedPage allowedRoles={USER_APPROVAL_ROLES}>
                     <UserApprovals />
                   </ProtectedPage>
                 }
@@ -509,9 +490,7 @@ const AppRoutes = () => {
               <Route
                 path="/admin-management"
                 element={
-                  <ProtectedPage
-                    allowedRoles={SUPERADMIN_ONLY}
-                  >
+                  <ProtectedPage allowedRoles={SUPERADMIN_ONLY}>
                     <AdminManagement />
                   </ProtectedPage>
                 }
@@ -522,9 +501,7 @@ const AppRoutes = () => {
               <Route
                 path="/audit-logs"
                 element={
-                  <ProtectedPage
-                    allowedRoles={ADMIN_ONLY}
-                  >
+                  <ProtectedPage allowedRoles={ADMIN_ONLY}>
                     <AuditLogs />
                   </ProtectedPage>
                 }
@@ -535,14 +512,11 @@ const AppRoutes = () => {
               <Route
                 path="/settings"
                 element={
-                  <ProtectedPage
-                    allowedRoles={ADMIN_ONLY}
-                  >
+                  <ProtectedPage allowedRoles={ADMIN_ONLY}>
                     <Settings />
                   </ProtectedPage>
                 }
               />
-
             </Route>
           </Route>
 
@@ -552,7 +526,6 @@ const AppRoutes = () => {
             path="*"
             element={<Navigate to="/login" replace />}
           />
-
         </Routes>
       </Suspense>
     </>
