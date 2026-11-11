@@ -1,4 +1,8 @@
 
+// ===============================================
+// PharmaCore - Supplier Routes
+// ===============================================
+
 const express = require("express");
 
 const {
@@ -20,11 +24,11 @@ const {
 
 const router = express.Router();
 
-// ======================================================
-// Role Permissions
-// ======================================================
+// ===============================================
+// Supplier Role Permissions
+// ===============================================
 
-// All operational roles can view suppliers.
+// Roles allowed to view suppliers and supplier details.
 const supplierReadRoles = [
   "admin",
   "pharmacist",
@@ -33,19 +37,36 @@ const supplierReadRoles = [
   "procurement"
 ];
 
-// Only authorized roles can modify supplier records.
-const supplierWriteRoles = [
+// Roles allowed to create new suppliers.
+// Cashiers are allowed to add suppliers.
+const supplierCreateRoles = [
+  "admin",
+  "pharmacist",
+  "cashier",
+  "inventory_manager",
+  "procurement"
+];
+
+// Roles allowed to update existing suppliers.
+// Cashiers are intentionally excluded.
+const supplierUpdateRoles = [
   "admin",
   "pharmacist",
   "inventory_manager",
   "procurement"
 ];
 
-// ======================================================
-// Supplier Routes
-// ======================================================
+// Only Admin and Inventory Manager can deactivate suppliers.
+const supplierDeactivateRoles = [
+  "admin",
+  "inventory_manager"
+];
 
+// ===============================================
 // GET /api/suppliers
+// View all suppliers
+// ===============================================
+
 router.get(
   "/",
   authenticate,
@@ -53,7 +74,11 @@ router.get(
   getAllSuppliers
 );
 
+// ===============================================
 // GET /api/suppliers/:id
+// View a single supplier
+// ===============================================
+
 router.get(
   "/:id",
   authenticate,
@@ -61,30 +86,46 @@ router.get(
   getSupplierById
 );
 
+// ===============================================
 // POST /api/suppliers
+// Create a new supplier
+// ===============================================
+
 router.post(
   "/",
   authenticate,
-  authorize(...supplierWriteRoles),
+  authorize(...supplierCreateRoles),
   validate(createSupplierSchema),
   createSupplier
 );
 
+// ===============================================
 // PUT /api/suppliers/:id
+// Update an existing supplier
+// ===============================================
+
 router.put(
   "/:id",
   authenticate,
-  authorize(...supplierWriteRoles),
+  authorize(...supplierUpdateRoles),
   validate(updateSupplierSchema),
   updateSupplier
 );
 
+// ===============================================
 // DELETE /api/suppliers/:id
+// Deactivate a supplier
+// ===============================================
+
 router.delete(
   "/:id",
   authenticate,
-  authorize("admin", "inventory_manager"),
+  authorize(...supplierDeactivateRoles),
   deactivateSupplier
 );
+
+// ===============================================
+// Export Router
+// ===============================================
 
 module.exports = router;
