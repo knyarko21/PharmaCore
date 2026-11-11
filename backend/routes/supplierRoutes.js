@@ -28,7 +28,7 @@ const router = express.Router();
 // Supplier Role Permissions
 // ===============================================
 
-// Roles allowed to view suppliers and supplier details.
+// View suppliers and supplier details.
 const supplierReadRoles = [
   "admin",
   "pharmacist",
@@ -37,8 +37,7 @@ const supplierReadRoles = [
   "procurement"
 ];
 
-// Roles allowed to create new suppliers.
-// Cashiers are allowed to add suppliers.
+// Create new suppliers.
 const supplierCreateRoles = [
   "admin",
   "pharmacist",
@@ -47,8 +46,8 @@ const supplierCreateRoles = [
   "procurement"
 ];
 
-// Roles allowed to update existing suppliers.
-// Cashiers are intentionally excluded.
+// Update existing suppliers.
+// Cashiers are excluded.
 const supplierUpdateRoles = [
   "admin",
   "pharmacist",
@@ -56,7 +55,8 @@ const supplierUpdateRoles = [
   "procurement"
 ];
 
-// Only Admin and Inventory Manager can deactivate suppliers.
+// Deactivate suppliers.
+// Only Admin and Inventory Manager.
 const supplierDeactivateRoles = [
   "admin",
   "inventory_manager"
@@ -76,7 +76,7 @@ router.get(
 
 // ===============================================
 // GET /api/suppliers/:id
-// View a single supplier
+// View supplier details
 // ===============================================
 
 router.get(
