@@ -1,9 +1,9 @@
 
 const sequelize = require("../config/database");
 
-// ======================================================
+// =========================================
 // MODEL IMPORTS
-// ======================================================
+// =========================================
 
 const User = require("./User");
 const Category = require("./Category");
@@ -22,9 +22,9 @@ const Payment = require("./Payment");
 const AuditLog = require("./AuditLog");
 const Setting = require("./Setting");
 
-// ======================================================
+// =========================================
 // USER AND SETTINGS
-// ======================================================
+// =========================================
 
 User.hasOne(Setting, {
   foreignKey: "userId",
@@ -38,9 +38,29 @@ Setting.belongsTo(User, {
   as: "user",
 });
 
-// ======================================================
+// =========================================
+// USER INVITATION RELATIONSHIP
+// =========================================
+
+// A user can invite multiple users.
+User.hasMany(User, {
+  foreignKey: "invitedByUserId",
+  as: "invitees",
+  onDelete: "SET NULL",
+  onUpdate: "CASCADE",
+});
+
+// Each invited user can have one inviter.
+User.belongsTo(User, {
+  foreignKey: "invitedByUserId",
+  as: "inviter",
+  onDelete: "SET NULL",
+  onUpdate: "CASCADE",
+});
+
+// =========================================
 // CATEGORY AND MEDICINE
-// ======================================================
+// =========================================
 
 Category.hasMany(Medicine, {
   foreignKey: "categoryId",
@@ -52,9 +72,9 @@ Medicine.belongsTo(Category, {
   as: "category",
 });
 
-// ======================================================
+// =========================================
 // MEDICINE AND BATCH
-// ======================================================
+// =========================================
 
 Medicine.hasMany(Batch, {
   foreignKey: "medicineId",
@@ -66,9 +86,9 @@ Batch.belongsTo(Medicine, {
   as: "medicine",
 });
 
-// ======================================================
+// =========================================
 // SUPPLIER AND BATCH
-// ======================================================
+// =========================================
 
 Supplier.hasMany(Batch, {
   foreignKey: "supplierId",
@@ -80,9 +100,9 @@ Batch.belongsTo(Supplier, {
   as: "supplier",
 });
 
-// ======================================================
+// =========================================
 // SUPPLIER AND PURCHASE
-// ======================================================
+// =========================================
 
 Supplier.hasMany(Purchase, {
   foreignKey: "supplierId",
@@ -94,9 +114,9 @@ Purchase.belongsTo(Supplier, {
   as: "supplier",
 });
 
-// ======================================================
+// =========================================
 // USER AND PURCHASE
-// ======================================================
+// =========================================
 
 User.hasMany(Purchase, {
   foreignKey: "createdBy",
@@ -108,9 +128,9 @@ Purchase.belongsTo(User, {
   as: "creator",
 });
 
-// ======================================================
+// =========================================
 // PURCHASE AND PURCHASE ITEMS
-// ======================================================
+// =========================================
 
 Purchase.hasMany(PurchaseItem, {
   foreignKey: "purchaseId",
@@ -122,9 +142,9 @@ PurchaseItem.belongsTo(Purchase, {
   as: "purchase",
 });
 
-// ======================================================
+// =========================================
 // MEDICINE AND PURCHASE ITEMS
-// ======================================================
+// =========================================
 
 Medicine.hasMany(PurchaseItem, {
   foreignKey: "medicineId",
@@ -136,9 +156,9 @@ PurchaseItem.belongsTo(Medicine, {
   as: "medicine",
 });
 
-// ======================================================
+// =========================================
 // CUSTOMER AND PRESCRIPTION
-// ======================================================
+// =========================================
 
 Customer.hasMany(Prescription, {
   foreignKey: "customerId",
@@ -150,9 +170,9 @@ Prescription.belongsTo(Customer, {
   as: "customer",
 });
 
-// ======================================================
+// =========================================
 // DOCTOR AND PRESCRIPTION
-// ======================================================
+// =========================================
 
 Doctor.hasMany(Prescription, {
   foreignKey: "doctorId",
@@ -168,9 +188,9 @@ Prescription.belongsTo(Doctor, {
   onUpdate: "CASCADE",
 });
 
-// ======================================================
+// =========================================
 // USER AND PRESCRIPTION
-// ======================================================
+// =========================================
 
 User.hasMany(Prescription, {
   foreignKey: "createdBy",
@@ -182,9 +202,9 @@ Prescription.belongsTo(User, {
   as: "creator",
 });
 
-// ======================================================
+// =========================================
 // PRESCRIPTION AND PRESCRIPTION ITEMS
-// ======================================================
+// =========================================
 
 Prescription.hasMany(PrescriptionItem, {
   foreignKey: "prescriptionId",
@@ -196,9 +216,9 @@ PrescriptionItem.belongsTo(Prescription, {
   as: "prescription",
 });
 
-// ======================================================
+// =========================================
 // MEDICINE AND PRESCRIPTION ITEMS
-// ======================================================
+// =========================================
 
 Medicine.hasMany(PrescriptionItem, {
   foreignKey: "medicineId",
@@ -210,9 +230,9 @@ PrescriptionItem.belongsTo(Medicine, {
   as: "medicine",
 });
 
-// ======================================================
+// =========================================
 // CUSTOMER AND SALES
-// ======================================================
+// =========================================
 
 Customer.hasMany(Sale, {
   foreignKey: "customerId",
@@ -224,9 +244,9 @@ Sale.belongsTo(Customer, {
   as: "customer",
 });
 
-// ======================================================
+// =========================================
 // USER AND SALES
-// ======================================================
+// =========================================
 
 User.hasMany(Sale, {
   foreignKey: "createdBy",
@@ -238,9 +258,9 @@ Sale.belongsTo(User, {
   as: "creator",
 });
 
-// ======================================================
+// =========================================
 // SALE AND SALE ITEMS
-// ======================================================
+// =========================================
 
 Sale.hasMany(SaleItem, {
   foreignKey: "saleId",
@@ -252,9 +272,9 @@ SaleItem.belongsTo(Sale, {
   as: "sale",
 });
 
-// ======================================================
+// =========================================
 // MEDICINE AND SALE ITEMS
-// ======================================================
+// =========================================
 
 Medicine.hasMany(SaleItem, {
   foreignKey: "medicineId",
@@ -266,9 +286,9 @@ SaleItem.belongsTo(Medicine, {
   as: "medicine",
 });
 
-// ======================================================
+// =========================================
 // PRESCRIPTION ITEMS AND SALE ITEMS
-// ======================================================
+// =========================================
 
 PrescriptionItem.hasMany(SaleItem, {
   foreignKey: "prescriptionItemId",
@@ -280,9 +300,9 @@ SaleItem.belongsTo(PrescriptionItem, {
   as: "prescriptionItem",
 });
 
-// ======================================================
+// =========================================
 // BATCH AND SALE ITEMS
-// ======================================================
+// =========================================
 
 Batch.hasMany(SaleItem, {
   foreignKey: "batchId",
@@ -294,9 +314,9 @@ SaleItem.belongsTo(Batch, {
   as: "batch",
 });
 
-// ======================================================
+// =========================================
 // SALE AND PAYMENTS
-// ======================================================
+// =========================================
 
 Sale.hasMany(Payment, {
   foreignKey: "saleId",
@@ -308,9 +328,9 @@ Payment.belongsTo(Sale, {
   as: "sale",
 });
 
-// ======================================================
+// =========================================
 // USER AND AUDIT LOGS
-// ======================================================
+// =========================================
 
 User.hasMany(AuditLog, {
   foreignKey: "userId",
@@ -322,9 +342,9 @@ AuditLog.belongsTo(User, {
   as: "user",
 });
 
-// ======================================================
+// =========================================
 // EXPORT DATABASE CONNECTION AND MODELS
-// ======================================================
+// =========================================
 
 module.exports = {
   sequelize,
@@ -349,7 +369,7 @@ module.exports = {
   Prescription,
   PrescriptionItem,
 
-  // Sales and payments
+  // Sales and payment
   Sale,
   SaleItem,
   Payment,

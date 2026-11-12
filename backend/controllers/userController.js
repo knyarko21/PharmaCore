@@ -1,4 +1,5 @@
 
+
 const { Op } = require("sequelize");
 const bcrypt = require("bcryptjs");
 const crypto = require("crypto");
@@ -7,20 +8,14 @@ const { User, sequelize } = require("../models");
 const { createAuditLog } = require("../services/auditLogService");
 
 const {
-  generateVerificationToken,
-  getVerificationExpiry,
-} = require("../services/emailVerificationService");
-
-const {
-  sendVerificationEmail,
-  sendAdminPasswordSetupEmail,
+  sendUserInvitationEmail,
   sendStaffApprovalEmail,
   sendStaffRejectionEmail,
 } = require("../services/emailService");
 
-// ======================================================
+// =====================================================
 // CONSTANTS
-// ======================================================
+// =====================================================
 
 const STAFF_ROLES = [
   "pharmacist",
@@ -37,10 +32,11 @@ const APPROVAL_STATUSES = [
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const BCRYPT_ROUNDS = 12;
+const INVITATION_EXPIRY_HOURS = 24;
 
-// ======================================================
+// =====================================================
 // GENERAL HELPERS
-// ======================================================
+// =====================================================
 
 const sendError = (res, status, message) =>
   res.status(status).json({
@@ -55,6 +51,23 @@ const logError = (context, error) => {
 const normalizeEmail = (email) =>
   email.trim().toLowerCase();
 
+const generateInvitationToken = () =>
+  crypto.randomBytes(32).toString("hex");
+
+const hashInvitationToken = (token) =>
+  crypto.createHash("sha256").update(token).digest("hex");
+
+const getInvitationExpiry = () =>
+  new Date(
+    Date.now() + INVITATION_EXPIRY_HOURS * 60 * 60 * 1000
+  );
+
+const getInviterName = (user) => {
+  const name = `${user?.firstName || ""} ${user?.lastName || ""}`.trim();
+
+  return name || "PharmaCore administrator";
+};
+
 const toSafeUser = (user) => ({
   id: user.id,
   firstName: user.firstName,
@@ -65,13 +78,15 @@ const toSafeUser = (user) => ({
   isActive: user.isActive,
   isEmailVerified: user.isEmailVerified,
   approvalStatus: user.approvalStatus,
+  invitedByUserId: user.invitedByUserId || null,
+  invitationAcceptedAt: user.invitationAcceptedAt || null,
   createdAt: user.createdAt,
   updatedAt: user.updatedAt,
 });
 
-// ======================================================
+// =====================================================
 // AUDIT LOGGING
-// ======================================================
+// =====================================================
 
 const writeAuditLog = async ({
   req,
@@ -98,24 +113,9 @@ const writeAuditLog = async ({
   }
 };
 
-// ======================================================
-// FIND TARGET USER
-// ======================================================
-
-const getTargetUser = async (targetUserId, res) => {
-  const user = await User.findByPk(targetUserId);
-
-  if (!user) {
-    sendError(res, 404, "User account not found.");
-    return null;
-  }
-
-  return user;
-};
-
-// ======================================================
+// =====================================================
 // PERMISSION HELPERS
-// ======================================================
+// =====================================================
 
 const canReviewRegistration = (requester, target) => {
   const hasReviewPermission = [
@@ -133,62 +133,146 @@ const canReviewRegistration = (requester, target) => {
 };
 
 const canManageActivation = (requester, target) => {
-  return (
-    requester.role === "superadmin" &&
-    target.role !== "superadmin"
-  );
+  if (requester.role === "superadmin") {
+    return target.role !== "superadmin";
+  }
+
+  if (requester.role === "admin") {
+    return (
+      STAFF_ROLES.includes(target.role) &&
+      Number(target.invitedByUserId) === Number(requester.id)
+    );
+  }
+
+  return false;
 };
 
-// ======================================================
+const validateNameAndEmail = ({
+  firstName,
+  lastName,
+  email,
+}) => {
+  if (
+    typeof firstName !== "string" ||
+    !firstName.trim() ||
+    typeof lastName !== "string" ||
+    !lastName.trim() ||
+    typeof email !== "string" ||
+    !email.trim()
+  ) {
+    return "First name, last name and email are required.";
+  }
+
+  if (
+    firstName.trim().length > 50 ||
+    lastName.trim().length > 50
+  ) {
+    return "First name and last name must not exceed 50 characters.";
+  }
+
+  if (!EMAIL_PATTERN.test(normalizeEmail(email))) {
+    return "Please provide a valid email address.";
+  }
+
+  return null;
+};
+
+// =====================================================
+// SHARED INVITATION CREATION
+// =====================================================
+
+const createInvitation = async ({
+  req,
+  firstName,
+  lastName,
+  email,
+  role,
+}) => {
+  const token = generateInvitationToken();
+
+  // The User model requires a password before invitation
+  // acceptance. This random password cannot be used by the invitee.
+  const temporaryPassword = crypto.randomBytes(48).toString("hex");
+
+  const hashedPassword = await bcrypt.hash(
+    temporaryPassword,
+    BCRYPT_ROUNDS
+  );
+
+  const user = await User.create({
+    firstName: firstName.trim(),
+    lastName: lastName.trim(),
+    email: normalizeEmail(email),
+    password: hashedPassword,
+
+    role,
+    requestedRole: null,
+
+    approvalStatus: "approved",
+    isActive: false,
+    isEmailVerified: false,
+
+    emailVerificationToken: null,
+    emailVerificationExpiresAt: null,
+
+    invitationTokenHash: hashInvitationToken(token),
+    invitationExpiresAt: getInvitationExpiry(),
+    invitedByUserId: req.user.id,
+    invitationAcceptedAt: null,
+  });
+
+  return {
+    user,
+    token,
+  };
+};
+
+const sendInvitation = async ({
+  user,
+  token,
+  inviter,
+}) => {
+  await sendUserInvitationEmail({
+    email: user.email,
+    firstName: user.firstName,
+    role: user.role,
+    token,
+    inviterName: getInviterName(inviter),
+  });
+};
+
+// =====================================================
 // POST /api/users/admins
 // Super Admin creates an Admin invitation.
-// ======================================================
+// =====================================================
 
 const createAdmin = async (req, res) => {
   try {
+    if (req.user.role !== "superadmin") {
+      return sendError(
+        res,
+        403,
+        "Only a Super Admin can invite Admin accounts."
+      );
+    }
+
     const {
       firstName,
       lastName,
       email,
     } = req.body || {};
 
-    if (
-      typeof firstName !== "string" ||
-      !firstName.trim() ||
-      typeof lastName !== "string" ||
-      !lastName.trim() ||
-      typeof email !== "string" ||
-      !email.trim()
-    ) {
-      return sendError(
-        res,
-        400,
-        "First name, last name and email are required."
-      );
+    const validationError = validateNameAndEmail({
+      firstName,
+      lastName,
+      email,
+    });
+
+    if (validationError) {
+      return sendError(res, 400, validationError);
     }
 
-    const normalizedFirstName = firstName.trim();
-    const normalizedLastName = lastName.trim();
     const normalizedEmail = normalizeEmail(email);
-
-    if (
-      normalizedFirstName.length > 50 ||
-      normalizedLastName.length > 50
-    ) {
-      return sendError(
-        res,
-        400,
-        "First name and last name must not exceed 50 characters."
-      );
-    }
-
-    if (!EMAIL_PATTERN.test(normalizedEmail)) {
-      return sendError(
-        res,
-        400,
-        "Please provide a valid email address."
-      );
-    }
 
     const existingUser = await User.findOne({
       where: {
@@ -204,80 +288,48 @@ const createAdmin = async (req, res) => {
       );
     }
 
-    // Generate an unpredictable temporary password.
-    // The invited Admin will create their own password.
-
-    const temporaryPassword = crypto
-      .randomBytes(48)
-      .toString("hex");
-
-    const verificationToken =
-      generateVerificationToken();
-
-    const hashedPassword = await bcrypt.hash(
-      temporaryPassword,
-      BCRYPT_ROUNDS
-    );
-
-    const user = await User.create({
-      firstName: normalizedFirstName,
-      lastName: normalizedLastName,
+    const { user, token } = await createInvitation({
+      req,
+      firstName,
+      lastName,
       email: normalizedEmail,
-      password: hashedPassword,
       role: "admin",
-      approvalStatus: "approved",
-      isActive: false,
-      isEmailVerified: false,
-      emailVerificationToken: verificationToken,
-      emailVerificationExpiresAt: getVerificationExpiry(),
     });
-
-    // Audit account creation even if email delivery fails.
 
     await writeAuditLog({
       req,
-      action: "create_admin",
+      action: "create_admin_invitation",
       description:
         `Super Admin ${req.user.id} created an Admin invitation for user ${user.id}.`,
       entityId: user.id,
     });
 
-    // Send the verification email.
+    let emailSent = false;
 
     try {
-      await sendVerificationEmail({
-        email: normalizedEmail,
-        firstName: normalizedFirstName,
-        token: verificationToken,
+      await sendInvitation({
+        user,
+        token,
+        inviter: req.user,
       });
 
-      return res.status(201).json({
-        success: true,
-        emailSent: true,
-        message:
-          "Admin invitation created. The invited user must verify their email and set a password before activation.",
-        user: toSafeUser(user),
-      });
+      emailSent = true;
     } catch (emailError) {
-      logError(
-        "Admin invitation email failed:",
-        emailError
-      );
-
-      return res.status(202).json({
-        success: true,
-        emailSent: false,
-        message:
-          "The Admin account was created, but the invitation email could not be delivered. Use the resend invitation action to try again.",
-        user: toSafeUser(user),
-      });
+      logError("Admin invitation email failed:", emailError);
     }
-  } catch (error) {
-    logError("Create Admin error:", error);
 
-    if (
-      error.name === "SequelizeUniqueConstraintError"
-    ) {
+    return res.status(emailSent ? 201 : 202).json({
+      success: true,
+      emailSent,
+      message: emailSent
+        ? "Admin invitation created and sent successfully. The invited Admin must accept the invitation before Super Admin activation."
+        : "The Admin account was created, but the invitation email could not be delivered. Please resend the invitation.",
+      user: toSafeUser(user),
+    });
+  } catch (error) {
+    logError("Create Admin invitation error:", error);
+
+    if (error.name === "SequelizeUniqueConstraintError") {
       return sendError(
         res,
         409,
@@ -285,9 +337,7 @@ const createAdmin = async (req, res) => {
       );
     }
 
-    if (
-      error.name === "SequelizeValidationError"
-    ) {
+    if (error.name === "SequelizeValidationError") {
       return sendError(
         res,
         400,
@@ -303,13 +353,253 @@ const createAdmin = async (req, res) => {
   }
 };
 
-// ======================================================
+// =====================================================
+// POST /api/users/invitations
+// Admin and Super Admin invite staff.
+// =====================================================
+
+const createStaffInvitation = async (req, res) => {
+  try {
+    if (!["admin", "superadmin"].includes(req.user.role)) {
+      return sendError(
+        res,
+        403,
+        "You are not permitted to invite staff."
+      );
+    }
+
+    const {
+      firstName,
+      lastName,
+      email,
+      role,
+    } = req.body || {};
+
+    const validationError = validateNameAndEmail({
+      firstName,
+      lastName,
+      email,
+    });
+
+    if (validationError) {
+      return sendError(res, 400, validationError);
+    }
+
+    if (!STAFF_ROLES.includes(role)) {
+      return sendError(
+        res,
+        400,
+        "Choose a valid staff role. Admin and Super Admin roles cannot be assigned through staff invitations."
+      );
+    }
+
+    const normalizedEmail = normalizeEmail(email);
+
+    const existingUser = await User.findOne({
+      where: {
+        email: normalizedEmail,
+      },
+    });
+
+    if (existingUser) {
+      return sendError(
+        res,
+        409,
+        "An account with this email already exists."
+      );
+    }
+
+    const { user, token } = await createInvitation({
+      req,
+      firstName,
+      lastName,
+      email: normalizedEmail,
+      role,
+    });
+
+    await writeAuditLog({
+      req,
+      action: "create_staff_invitation",
+      description:
+        `User ${req.user.id} (${req.user.role}) invited user ${user.id} with role ${role}.`,
+      entityId: user.id,
+    });
+
+    let emailSent = false;
+
+    try {
+      await sendInvitation({
+        user,
+        token,
+        inviter: req.user,
+      });
+
+      emailSent = true;
+    } catch (emailError) {
+      logError("Staff invitation email failed:", emailError);
+    }
+
+    return res.status(emailSent ? 201 : 202).json({
+      success: true,
+      emailSent,
+      message: emailSent
+        ? "Staff invitation created and sent successfully."
+        : "The staff account was created, but the invitation email could not be delivered. Please resend the invitation.",
+      user: toSafeUser(user),
+    });
+  } catch (error) {
+    logError("Create staff invitation error:", error);
+
+    if (error.name === "SequelizeUniqueConstraintError") {
+      return sendError(
+        res,
+        409,
+        "An account with this email already exists."
+      );
+    }
+
+    if (error.name === "SequelizeValidationError") {
+      return sendError(
+        res,
+        400,
+        "The staff account details are invalid."
+      );
+    }
+
+    return sendError(
+      res,
+      500,
+      "Unable to create staff invitation."
+    );
+  }
+};
+
+// =====================================================
+// SHARED INVITATION RESEND
+// =====================================================
+
+const resendInvitation = async ({
+  req,
+  targetUserId,
+  expectedRole,
+}) => {
+  return sequelize.transaction(
+    async (transaction) => {
+      const user = await User.findByPk(targetUserId, {
+        transaction,
+        lock: transaction.LOCK.UPDATE,
+      });
+
+      if (!user) {
+        return {
+          errorStatus: 404,
+          errorMessage: "User account not found.",
+        };
+      }
+
+      // Admin invitations require the exact Admin role.
+      // Staff invitations accept any supported staff role.
+      const validRole =
+        expectedRole === "admin"
+          ? user.role === "admin"
+          : STAFF_ROLES.includes(user.role);
+
+      if (!validRole) {
+        return {
+          errorStatus: 400,
+          errorMessage:
+            "This account does not have the expected role.",
+        };
+      }
+
+      // Check ownership BEFORE rotating the invitation token.
+      if (
+        req.user.role === "admin" &&
+        (
+          !STAFF_ROLES.includes(user.role) ||
+          Number(user.invitedByUserId) !== Number(req.user.id)
+        )
+      ) {
+        return {
+          errorStatus: 403,
+          errorMessage:
+            "You can only resend invitations for staff members you invited.",
+        };
+      }
+
+      if (user.isActive) {
+        return {
+          errorStatus: 409,
+          errorMessage: "This account is already active.",
+        };
+      }
+
+      if (user.approvalStatus !== "approved") {
+        return {
+          errorStatus: 409,
+          errorMessage:
+            "Only approved accounts can receive invitations.",
+        };
+      }
+
+      if (user.invitationAcceptedAt) {
+        return {
+          errorStatus: 409,
+          errorMessage:
+            "This invitation has already been accepted. Use account activation instead.",
+        };
+      }
+
+      // A legacy Admin who has already completed password
+      // setup should be activated, not invited again.
+      if (
+        expectedRole === "admin" &&
+        user.isEmailVerified &&
+        !user.invitationTokenHash
+      ) {
+        return {
+          errorStatus: 409,
+          errorMessage:
+            "This Admin has already completed password setup. Use the account activation action instead.",
+        };
+      }
+
+      const token = generateInvitationToken();
+
+      user.invitationTokenHash = hashInvitationToken(token);
+      user.invitationExpiresAt = getInvitationExpiry();
+
+      // Invalidate any older email verification token.
+      user.emailVerificationToken = null;
+      user.emailVerificationExpiresAt = null;
+
+      await user.save({
+        transaction,
+      });
+
+      return {
+        user,
+        token,
+      };
+    }
+  );
+};
+
+// =====================================================
 // POST /api/users/admins/:id/resend-invitation
 // Super Admin resends an Admin invitation.
-// ======================================================
+// =====================================================
 
 const resendAdminInvitation = async (req, res) => {
   try {
+    if (req.user.role !== "superadmin") {
+      return sendError(
+        res,
+        403,
+        "Only a Super Admin can resend Admin invitations."
+      );
+    }
+
     const targetUserId = Number(req.params.id);
 
     if (
@@ -323,89 +613,11 @@ const resendAdminInvitation = async (req, res) => {
       );
     }
 
-    if (req.user.role !== "superadmin") {
-      return sendError(
-        res,
-        403,
-        "Only a Super Admin can resend Admin invitations."
-      );
-    }
-
-    // Generate and save a fresh token while holding a
-    // database row lock. This prevents simultaneous
-    // resend requests from issuing competing tokens.
-
-    const result = await sequelize.transaction(
-      async (transaction) => {
-        const user = await User.findByPk(
-          targetUserId,
-          {
-            transaction,
-            lock: transaction.LOCK.UPDATE,
-          }
-        );
-
-        if (!user) {
-          return {
-            errorStatus: 404,
-            errorMessage: "User account not found.",
-          };
-        }
-
-        if (user.role !== "admin") {
-          return {
-            errorStatus: 400,
-            errorMessage:
-              "This account is not an Admin account.",
-          };
-        }
-
-        if (user.isActive) {
-          return {
-            errorStatus: 409,
-            errorMessage:
-              "This Admin account is already active.",
-          };
-        }
-
-        if (user.approvalStatus !== "approved") {
-          return {
-            errorStatus: 409,
-            errorMessage:
-              "Only approved Admin accounts can receive invitations.",
-          };
-        }
-
-        if (
-          user.isEmailVerified &&
-          !user.emailVerificationToken
-        ) {
-          return {
-            errorStatus: 409,
-            errorMessage:
-              "This Admin has already completed password setup. Use the account activation action instead.",
-          };
-        }
-
-        const token = generateVerificationToken();
-
-        user.emailVerificationToken = token;
-        user.emailVerificationExpiresAt =
-          getVerificationExpiry();
-
-        await user.save({
-          transaction,
-        });
-
-        return {
-          user,
-          token,
-          emailType: user.isEmailVerified
-            ? "password_setup"
-            : "verification",
-        };
-      }
-    );
+    const result = await resendInvitation({
+      req,
+      targetUserId,
+      expectedRole: "admin",
+    });
 
     if (result.errorStatus) {
       return sendError(
@@ -415,25 +627,14 @@ const resendAdminInvitation = async (req, res) => {
       );
     }
 
-    const { user, token, emailType } = result;
-
-    // Send the appropriate email after the transaction
-    // has committed. A failed email can be retried.
+    const { user, token } = result;
 
     try {
-      if (emailType === "verification") {
-        await sendVerificationEmail({
-          email: user.email,
-          firstName: user.firstName,
-          token,
-        });
-      } else {
-        await sendAdminPasswordSetupEmail({
-          email: user.email,
-          firstName: user.firstName,
-          token,
-        });
-      }
+      await sendInvitation({
+        user,
+        token,
+        inviter: req.user,
+      });
     } catch (emailError) {
       logError(
         "Resend Admin invitation email failed:",
@@ -460,21 +661,14 @@ const resendAdminInvitation = async (req, res) => {
       req,
       action: "resend_admin_invitation",
       description:
-        `Super Admin ${req.user.id} resent the ${
-          emailType === "verification"
-            ? "email verification"
-            : "password setup"
-        } invitation to Admin user ${user.id}.`,
+        `Super Admin ${req.user.id} resent an Admin invitation to user ${user.id}.`,
       entityId: user.id,
     });
 
     return res.status(200).json({
       success: true,
       emailSent: true,
-      message:
-        emailType === "verification"
-          ? "Admin email verification invitation resent successfully."
-          : "Admin password setup invitation resent successfully.",
+      message: "Admin invitation resent successfully.",
       user: toSafeUser(user),
     });
   } catch (error) {
@@ -488,10 +682,107 @@ const resendAdminInvitation = async (req, res) => {
   }
 };
 
-// ======================================================
+// =====================================================
+// POST /api/users/invitations/:id/resend
+// Admin and Super Admin resend staff invitations.
+// =====================================================
+
+const resendStaffInvitation = async (req, res) => {
+  try {
+    if (!["admin", "superadmin"].includes(req.user.role)) {
+      return sendError(
+        res,
+        403,
+        "You are not permitted to resend staff invitations."
+      );
+    }
+
+    const targetUserId = Number(req.params.id);
+
+    if (
+      !Number.isSafeInteger(targetUserId) ||
+      targetUserId <= 0
+    ) {
+      return sendError(
+        res,
+        400,
+        "A valid user ID is required."
+      );
+    }
+
+    const result = await resendInvitation({
+      req,
+      targetUserId,
+      expectedRole: "staff",
+    });
+
+    if (result.errorStatus) {
+      return sendError(
+        res,
+        result.errorStatus,
+        result.errorMessage
+      );
+    }
+
+    const { user, token } = result;
+
+    try {
+      await sendInvitation({
+        user,
+        token,
+        inviter: req.user,
+      });
+    } catch (emailError) {
+      logError(
+        "Resend staff invitation email failed:",
+        emailError
+      );
+
+      await writeAuditLog({
+        req,
+        action: "staff_invitation_email_failed",
+        description:
+          `User ${req.user.id} attempted to resend a staff invitation to user ${user.id}, but email delivery failed.`,
+        entityId: user.id,
+      });
+
+      return res.status(503).json({
+        success: false,
+        emailSent: false,
+        message:
+          "A new invitation token was generated, but the email could not be delivered. Please try resending the invitation.",
+      });
+    }
+
+    await writeAuditLog({
+      req,
+      action: "resend_staff_invitation",
+      description:
+        `User ${req.user.id} resent a staff invitation to user ${user.id}.`,
+      entityId: user.id,
+    });
+
+    return res.status(200).json({
+      success: true,
+      emailSent: true,
+      message: "Staff invitation resent successfully.",
+      user: toSafeUser(user),
+    });
+  } catch (error) {
+    logError("Resend staff invitation error:", error);
+
+    return sendError(
+      res,
+      500,
+      "Unable to resend staff invitation."
+    );
+  }
+};
+
+// =====================================================
 // GET /api/users/admins
 // Super Admin views Admin accounts.
-// ======================================================
+// =====================================================
 
 const getAdmins = async (_req, res) => {
   try {
@@ -509,6 +800,8 @@ const getAdmins = async (_req, res) => {
         "isActive",
         "isEmailVerified",
         "approvalStatus",
+        "invitedByUserId",
+        "invitationAcceptedAt",
         "createdAt",
         "updatedAt",
       ],
@@ -531,10 +824,72 @@ const getAdmins = async (_req, res) => {
   }
 };
 
-// ======================================================
+// =====================================================
+// GET /api/users/staff
+// Admin sees own invitees; Super Admin sees all staff.
+// =====================================================
+
+const getStaff = async (req, res) => {
+  try {
+    if (!["admin", "superadmin"].includes(req.user.role)) {
+      return sendError(
+        res,
+        403,
+        "You are not permitted to view staff accounts."
+      );
+    }
+
+    const where = {
+      role: {
+        [Op.in]: STAFF_ROLES,
+      },
+    };
+
+    if (req.user.role === "admin") {
+      where.invitedByUserId = req.user.id;
+    }
+
+    const staff = await User.findAll({
+      where,
+      attributes: [
+        "id",
+        "firstName",
+        "lastName",
+        "email",
+        "role",
+        "requestedRole",
+        "isActive",
+        "isEmailVerified",
+        "approvalStatus",
+        "invitedByUserId",
+        "invitationAcceptedAt",
+        "createdAt",
+        "updatedAt",
+      ],
+      order: [["createdAt", "DESC"]],
+    });
+
+    return res.status(200).json({
+      success: true,
+      count: staff.length,
+      staff: staff.map(toSafeUser),
+    });
+  } catch (error) {
+    logError("Get staff error:", error);
+
+    return sendError(
+      res,
+      500,
+      "Unable to retrieve staff accounts."
+    );
+  }
+};
+
+// =====================================================
 // GET /api/users
+// Legacy registration listing.
 // Optional filter: ?approvalStatus=pending
-// ======================================================
+// =====================================================
 
 const getUsers = async (req, res) => {
   try {
@@ -552,8 +907,6 @@ const getUsers = async (req, res) => {
 
       where.approvalStatus = approvalStatus;
     }
-
-    // Ordinary Admins must not see Super Admin accounts.
 
     if (req.user.role === "admin") {
       where.role = {
@@ -573,6 +926,8 @@ const getUsers = async (req, res) => {
         "isActive",
         "isEmailVerified",
         "approvalStatus",
+        "invitedByUserId",
+        "invitationAcceptedAt",
         "createdAt",
         "updatedAt",
       ],
@@ -595,10 +950,10 @@ const getUsers = async (req, res) => {
   }
 };
 
-// ======================================================
+// =====================================================
 // PATCH /api/users/:id/approval
-// Admin and Super Admin review ordinary staff.
-// ======================================================
+// Legacy Admin and Super Admin registration review.
+// =====================================================
 
 const reviewUserRegistration = async (req, res) => {
   try {
@@ -617,9 +972,7 @@ const reviewUserRegistration = async (req, res) => {
 
     const { approvalStatus, role } = req.body || {};
 
-    if (
-      !["approved", "rejected"].includes(approvalStatus)
-    ) {
+    if (!["approved", "rejected"].includes(approvalStatus)) {
       return sendError(
         res,
         400,
@@ -649,19 +1002,12 @@ const reviewUserRegistration = async (req, res) => {
       );
     }
 
-    // The transaction and row lock ensure that two
-    // administrators cannot approve/reject the same
-    // pending registration simultaneously.
-
     const result = await sequelize.transaction(
       async (transaction) => {
-        const user = await User.findByPk(
-          targetUserId,
-          {
-            transaction,
-            lock: transaction.LOCK.UPDATE,
-          }
-        );
+        const user = await User.findByPk(targetUserId, {
+          transaction,
+          lock: transaction.LOCK.UPDATE,
+        });
 
         if (!user) {
           return {
@@ -673,8 +1019,7 @@ const reviewUserRegistration = async (req, res) => {
         if (Number(user.id) === Number(req.user.id)) {
           return {
             errorStatus: 400,
-            errorMessage:
-              "You cannot review your own account.",
+            errorMessage: "You cannot review your own account.",
           };
         }
 
@@ -712,8 +1057,6 @@ const reviewUserRegistration = async (req, res) => {
         user.approvalStatus = approvalStatus;
 
         if (approvalStatus === "approved") {
-          // The reviewing administrator explicitly chooses
-          // the final assigned role.
           user.role = role;
           user.isActive = true;
         } else {
@@ -746,15 +1089,11 @@ const reviewUserRegistration = async (req, res) => {
       requestedRole,
     } = result;
 
-    // The database decision is committed before sending
-    // emails. Email failure must not undo the decision.
-
     await writeAuditLog({
       req,
-      action:
-        approvalStatus === "approved"
-          ? "approve"
-          : "reject",
+      action: approvalStatus === "approved"
+        ? "approve"
+        : "reject",
       description:
         `User ${req.user.id} ${approvalStatus} registration for user ${user.id}. ` +
         `Requested role: ${requestedRole}. ` +
@@ -806,10 +1145,7 @@ const reviewUserRegistration = async (req, res) => {
       user: toSafeUser(user),
     });
   } catch (error) {
-    logError(
-      "Review user registration error:",
-      error
-    );
+    logError("Review user registration error:", error);
 
     if (
       error.name === "SequelizeValidationError" ||
@@ -830,10 +1166,11 @@ const reviewUserRegistration = async (req, res) => {
   }
 };
 
-// ======================================================
+// =====================================================
 // PATCH /api/users/:id/activation
-// Super Admin only.
-// ======================================================
+// Super Admin manages all accounts except Super Admin.
+// Admin manages only their own staff invitees.
+// =====================================================
 
 const updateUserActivation = async (req, res) => {
   try {
@@ -860,23 +1197,20 @@ const updateUserActivation = async (req, res) => {
       );
     }
 
-    if (req.user.role !== "superadmin") {
+    if (!["admin", "superadmin"].includes(req.user.role)) {
       return sendError(
         res,
         403,
-        "Only a Super Admin can manage account activation."
+        "You are not permitted to manage account activation."
       );
     }
 
     const result = await sequelize.transaction(
       async (transaction) => {
-        const user = await User.findByPk(
-          targetUserId,
-          {
-            transaction,
-            lock: transaction.LOCK.UPDATE,
-          }
-        );
+        const user = await User.findByPk(targetUserId, {
+          transaction,
+          lock: transaction.LOCK.UPDATE,
+        });
 
         if (!user) {
           return {
@@ -888,8 +1222,7 @@ const updateUserActivation = async (req, res) => {
         if (Number(user.id) === Number(req.user.id)) {
           return {
             errorStatus: 400,
-            errorMessage:
-              "You cannot change your own account status.",
+            errorMessage: "You cannot change your own account status.",
           };
         }
 
@@ -897,7 +1230,7 @@ const updateUserActivation = async (req, res) => {
           return {
             errorStatus: 403,
             errorMessage:
-              "Only a Super Admin can manage this account.",
+              "You are not permitted to manage this account.",
           };
         }
 
@@ -963,7 +1296,7 @@ const updateUserActivation = async (req, res) => {
       req,
       action: isActive ? "activate" : "deactivate",
       description:
-        `User ${req.user.id} ${
+        `User ${req.user.id} (${req.user.role}) ${
           isActive ? "activated" : "deactivated"
         } user ${user.id}.`,
       entityId: user.id,
@@ -977,10 +1310,7 @@ const updateUserActivation = async (req, res) => {
       user: toSafeUser(user),
     });
   } catch (error) {
-    logError(
-      "Update user activation error:",
-      error
-    );
+    logError("Update user activation error:", error);
 
     return sendError(
       res,
@@ -990,14 +1320,19 @@ const updateUserActivation = async (req, res) => {
   }
 };
 
-// ======================================================
+// =====================================================
 // EXPORT CONTROLLER FUNCTIONS
-// ======================================================
+// =====================================================
 
 module.exports = {
   createAdmin,
   resendAdminInvitation,
   getAdmins,
+
+  createStaffInvitation,
+  resendStaffInvitation,
+  getStaff,
+
   getUsers,
   reviewUserRegistration,
   updateUserActivation,

@@ -5,6 +5,9 @@ const {
   createAdmin,
   resendAdminInvitation,
   getAdmins,
+  createStaffInvitation,
+  resendStaffInvitation,
+  getStaff,
   getUsers,
   reviewUserRegistration,
   updateUserActivation,
@@ -15,32 +18,25 @@ const { authorize } = require("../middleware/roleMiddleware");
 
 const router = express.Router();
 
-// ======================================================
-// AUTHENTICATION
 // All user-management routes require authentication.
-// ======================================================
-
 router.use(authenticate);
 
 // ======================================================
 // ADMIN MANAGEMENT — SUPER ADMIN ONLY
 // ======================================================
 
-// POST /api/users/admins
 router.post(
   "/admins",
   authorize("superadmin"),
   createAdmin
 );
 
-// GET /api/users/admins
 router.get(
   "/admins",
   authorize("superadmin"),
   getAdmins
 );
 
-// POST /api/users/admins/:id/resend-invitation
 router.post(
   "/admins/:id/resend-invitation",
   authorize("superadmin"),
@@ -48,42 +44,53 @@ router.post(
 );
 
 // ======================================================
-// GENERAL USER MANAGEMENT
+// STAFF INVITATIONS — ADMIN AND SUPER ADMIN
 // ======================================================
 
-// GET /api/users
-// GET /api/users?approvalStatus=pending
+router.post(
+  "/invitations",
+  authorize("admin", "superadmin"),
+  createStaffInvitation
+);
+
 router.get(
-  "/",
-  authorize("superadmin", "admin"),
-  getUsers
+  "/staff",
+  authorize("admin", "superadmin"),
+  getStaff
+);
+
+router.post(
+  "/invitations/:id/resend",
+  authorize("admin", "superadmin"),
+  resendStaffInvitation
 );
 
 // ======================================================
-// STAFF REGISTRATION APPROVAL
+// LEGACY USER REGISTRATION
+// TEMPORARILY RETAINED FOR EXISTING REGISTRATIONS
 // ======================================================
 
-// PATCH /api/users/:id/approval
+router.get(
+  "/",
+  authorize("admin", "superadmin"),
+  getUsers
+);
+
 router.patch(
   "/:id/approval",
-  authorize("superadmin", "admin"),
+  authorize("admin", "superadmin"),
   reviewUserRegistration
 );
 
 // ======================================================
 // ACCOUNT ACTIVATION
-// SUPER ADMIN ONLY
+// CONTROLLER ENFORCES OWNERSHIP AND ROLE PERMISSIONS
 // ======================================================
 
-// PATCH /api/users/:id/activation
 router.patch(
   "/:id/activation",
-  authorize("superadmin"),
+  authorize("admin", "superadmin"),
   updateUserActivation
 );
-
-// ======================================================
-// EXPORT ROUTER
-// ======================================================
 
 module.exports = router;

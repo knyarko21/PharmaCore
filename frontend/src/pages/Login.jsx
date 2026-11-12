@@ -1,9 +1,9 @@
 
+
 import { useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../context/AuthContext";
-import api from "../services/api";
 
 const getReturnPath = (location) => {
   const path = location.state?.from?.pathname;
@@ -30,13 +30,11 @@ const LoginPage = () => {
 
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [showInvitationHelp, setShowInvitationHelp] = useState(false);
 
-  // Resend verification state
-  const [showResend, setShowResend] = useState(false);
-  const [resendEmail, setResendEmail] = useState("");
-  const [resendMessage, setResendMessage] = useState("");
-  const [resendError, setResendError] = useState("");
-  const [resending, setResending] = useState(false);
+  // ====================================================
+  // Login
+  // ====================================================
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -44,12 +42,15 @@ const LoginPage = () => {
     if (submitting) return;
 
     setError("");
+    setShowInvitationHelp(false);
     setSubmitting(true);
 
     try {
       await login(email.trim(), password);
 
-      navigate(getReturnPath(location), { replace: true });
+      navigate(getReturnPath(location), {
+        replace: true,
+      });
     } catch (loginError) {
       const message =
         loginError?.response?.data?.message ||
@@ -58,64 +59,22 @@ const LoginPage = () => {
 
       setError(message);
 
-      // Suggest email verification when the backend indicates
-      // that the account has not been verified.
-      if (
-        /verif|verify|unverified/i.test(message)
-      ) {
-        setResendEmail(email.trim());
-        setShowResend(true);
+      if (/verif|verify|unverified|invitation/i.test(message)) {
+        setShowInvitationHelp(true);
       }
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleResendVerification = async (event) => {
-    event.preventDefault();
-
-    if (resending) return;
-
-    const normalizedEmail = resendEmail.trim().toLowerCase();
-
-    if (!normalizedEmail) {
-      setResendError("Please enter your registered email address.");
-      return;
-    }
-
-    setResendError("");
-    setResendMessage("");
-    setResending(true);
-
-    try {
-      const response = await api.post("/auth/resend-verification", {
-        email: normalizedEmail,
-      });
-
-      setResendMessage(
-        response?.data?.message ||
-          "If your account requires verification, a verification email will be sent."
-      );
-    } catch (requestError) {
-      setResendError(
-        requestError?.response?.data?.message ||
-          "We could not resend the verification email. Please try again."
-      );
-    } finally {
-      setResending(false);
-    }
-  };
-
-  const openResendSection = () => {
-    setResendEmail(email.trim());
-    setResendMessage("");
-    setResendError("");
-    setShowResend((previous) => !previous);
-  };
+  // ====================================================
+  // Render
+  // ====================================================
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#08080a] px-4 py-8 text-zinc-100">
       <div className="w-full max-w-md rounded-2xl border border-zinc-800 bg-[#0d0d10] p-6 shadow-xl sm:p-8">
+
         {/* LOGIN FORM */}
 
         <form
@@ -141,6 +100,7 @@ const LoginPage = () => {
           )}
 
           <div className="mt-6 space-y-4">
+
             {/* EMAIL */}
 
             <div>
@@ -210,103 +170,47 @@ const LoginPage = () => {
           </button>
         </form>
 
-        {/* EMAIL VERIFICATION */}
+        {/* INVITATION HELP */}
 
-        <div className="mt-5 border-t border-zinc-800 pt-5">
-          <button
-            type="button"
-            onClick={openResendSection}
-            className="w-full text-center text-sm font-medium text-violet-400 transition hover:text-fuchsia-400"
-          >
-            {showResend
-              ? "Hide verification options"
-              : "Didn't receive your verification email?"}
-          </button>
+        {showInvitationHelp && (
+          <div className="mt-5 rounded-xl border border-amber-500/20 bg-amber-500/10 p-4">
+            <h2 className="text-sm font-semibold text-amber-300">
+              Account verification or invitation required
+            </h2>
 
-          {showResend && (
-            <form
-              onSubmit={handleResendVerification}
-              className="mt-4 space-y-3"
-              aria-busy={resending}
-            >
-              <p className="text-sm leading-6 text-zinc-400">
-                Enter the email address you used when registering.
-                We'll request another verification email for your account.
-              </p>
+            <p className="mt-2 text-sm leading-6 text-zinc-300">
+              If your account has not been verified or you have
+              not accepted your invitation, please contact your
+              PharmaCore administrator for assistance.
+            </p>
+          </div>
+        )}
 
-              <div>
-                <label
-                  htmlFor="resend-email"
-                  className="mb-1.5 block text-sm font-medium text-zinc-300"
-                >
-                  Registered email address
-                </label>
+        {/* INVITATION INFORMATION */}
 
-                <input
-                  id="resend-email"
-                  name="resendEmail"
-                  type="email"
-                  value={resendEmail}
-                  onChange={(event) => {
-                    setResendEmail(event.target.value);
-                    setResendError("");
-                    setResendMessage("");
-                  }}
-                  autoComplete="email"
-                  inputMode="email"
-                  autoCapitalize="none"
-                  spellCheck="false"
-                  required
-                  disabled={resending}
-                  className="w-full rounded-xl border border-zinc-800 bg-[#121317] px-3 py-2.5 text-white outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 disabled:cursor-not-allowed disabled:opacity-60"
-                />
-              </div>
+        <div className="mt-6 border-t border-zinc-800 pt-5">
+          <div className="rounded-xl border border-violet-500/20 bg-violet-500/[0.06] p-4">
+            <h2 className="text-sm font-semibold text-violet-300">
+              New to PharmaCore?
+            </h2>
 
-              {resendError && (
-                <div
-                  role="alert"
-                  className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300"
-                >
-                  {resendError}
-                </div>
-              )}
-
-              {resendMessage && (
-                <div
-                  role="status"
-                  className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-300"
-                >
-                  {resendMessage}
-                </div>
-              )}
-
-              <button
-                type="submit"
-                disabled={resending || !resendEmail.trim()}
-                className="w-full rounded-xl border border-violet-500/40 bg-violet-500/10 px-4 py-3 font-semibold text-violet-300 transition hover:bg-violet-500/20 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {resending
-                  ? "Sending request..."
-                  : "Resend verification email"}
-              </button>
-            </form>
-          )}
+            <p className="mt-2 text-sm leading-6 text-zinc-400">
+              PharmaCore accounts are created through administrator
+              invitations. Contact your administrator to receive
+              an invitation link. You can then use that link to
+              accept your invitation and create your password.
+            </p>
+          </div>
         </div>
 
-        {/* SIGNUP LINK */}
+        {/* FOOTER */}
 
-        <div className="mt-6 border-t border-zinc-800 pt-5 text-center">
-          <p className="text-sm text-zinc-400">
-            Don't have an account?
+        <div className="mt-6 text-center">
+          <p className="text-xs text-zinc-500">
+            PharmaCore Pharmacy Management System
           </p>
-
-          <Link
-            to="/signup"
-            className="mt-2 inline-block font-semibold text-violet-400 transition hover:text-fuchsia-400"
-          >
-            Create an account
-          </Link>
         </div>
+
       </div>
     </main>
   );

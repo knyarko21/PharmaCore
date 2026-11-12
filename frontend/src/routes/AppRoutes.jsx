@@ -1,5 +1,4 @@
 
-
 import { lazy, Suspense, useEffect } from "react";
 
 import {
@@ -14,7 +13,7 @@ import MainLayout from "../layouts/MainLayout";
 import ProtectedRoute from "./ProtectedRoute";
 
 // ======================================================
-// Role Configuration
+// ROLE CONFIGURATION
 // ======================================================
 
 const ROLES = {
@@ -37,6 +36,11 @@ const USER_APPROVAL_ROLES = [
   ROLES.ADMIN,
 ];
 
+const STAFF_MANAGEMENT_ROLES = [
+  ROLES.SUPERADMIN,
+  ROLES.ADMIN,
+];
+
 const ADMIN_ONLY = [
   ROLES.ADMIN,
 ];
@@ -52,14 +56,7 @@ const PHARMACY_ROLES = [
   ROLES.PHARMACIST,
 ];
 
-const INVENTORY_ROLES = [
-  ROLES.ADMIN,
-  ROLES.INVENTORY_MANAGER,
-  ROLES.PROCUREMENT,
-];
 
-// Roles allowed to create and receive purchases.
-// Keep this aligned with backend PURCHASE_MANAGE_ROLES.
 const PURCHASE_ROLES = [
   ROLES.ADMIN,
   ROLES.PHARMACIST,
@@ -76,7 +73,7 @@ const ANALYTICS_ROLES = [
 ];
 
 // ======================================================
-// Role Normalization
+// ROLE NORMALIZATION
 // ======================================================
 
 const normalizeRole = (role) =>
@@ -86,7 +83,7 @@ const normalizeRole = (role) =>
     .replace(/[\s-]+/g, "_");
 
 // ======================================================
-// Role Hierarchy
+// ROLE HIERARCHY
 // ======================================================
 
 const ROLE_HIERARCHY = {
@@ -119,7 +116,9 @@ const ROLE_HIERARCHY = {
 const hasRolePermission = (userRole, allowedRoles) => {
   const normalizedUserRole = normalizeRole(userRole);
 
-  const normalizedAllowedRoles = allowedRoles.map(normalizeRole);
+  const normalizedAllowedRoles = allowedRoles.map(
+    normalizeRole
+  );
 
   const inheritedRoles =
     ROLE_HIERARCHY[normalizedUserRole] || [];
@@ -130,19 +129,23 @@ const hasRolePermission = (userRole, allowedRoles) => {
 };
 
 // ======================================================
-// Lazy-loaded Authentication Pages
+// LAZY-LOADED AUTHENTICATION PAGES
 // ======================================================
 
 const Login = lazy(() => import("../pages/Login"));
 
 const SignUp = lazy(() => import("../pages/SignUp"));
 
+const AcceptInvitation = lazy(
+  () => import("../pages/AcceptInvitation")
+);
+
 const SetupAdminPassword = lazy(
   () => import("../pages/SetupAdminPassword")
 );
 
 // ======================================================
-// Lazy-loaded Application Pages
+// LAZY-LOADED APPLICATION PAGES
 // ======================================================
 
 const Dashboard = lazy(() => import("../pages/Dashboard"));
@@ -187,7 +190,9 @@ const UserApprovals = lazy(
   () => import("../pages/UserApprovals")
 );
 
-// Super Admin Management
+const StaffManagement = lazy(
+  () => import("../pages/StaffManagement")
+);
 
 const AdminManagement = lazy(
   () => import("../pages/AdminManagement")
@@ -198,7 +203,7 @@ const Unauthorized = lazy(
 );
 
 // ======================================================
-// Page Loading Fallback
+// PAGE LOADING FALLBACK
 // ======================================================
 
 const PageLoader = () => (
@@ -228,7 +233,7 @@ const PageLoader = () => (
 );
 
 // ======================================================
-// Scroll Restoration
+// SCROLL RESTORATION
 // ======================================================
 
 const ScrollToTop = () => {
@@ -246,7 +251,7 @@ const ScrollToTop = () => {
 };
 
 // ======================================================
-// Role-Protected Route
+// ROLE-PROTECTED ROUTE
 // ======================================================
 
 const RoleProtectedRoute = ({
@@ -269,7 +274,7 @@ const RoleProtectedRoute = ({
 };
 
 // ======================================================
-// Reusable Protected Page
+// REUSABLE PROTECTED PAGE
 // ======================================================
 
 const ProtectedPage = ({
@@ -282,7 +287,7 @@ const ProtectedPage = ({
 );
 
 // ======================================================
-// Application Routes
+// APPLICATION ROUTES
 // ======================================================
 
 const AppRoutes = () => {
@@ -292,46 +297,55 @@ const AppRoutes = () => {
 
       <Suspense fallback={<PageLoader />}>
         <Routes>
-          {/* Default route */}
+          {/* DEFAULT ROUTE */}
 
           <Route
             path="/"
             element={<Navigate to="/dashboard" replace />}
           />
 
-          {/* Public authentication routes */}
+          {/* PUBLIC AUTHENTICATION ROUTES */}
 
           <Route
             path="/login"
             element={<Login />}
           />
 
+          {/* Temporarily retained for legacy registrations. */}
+
           <Route
             path="/signup"
             element={<SignUp />}
           />
 
-          {/* Public Admin password setup route */}
+          {/* New invitation acceptance route. */}
+
+          <Route
+            path="/accept-invitation"
+            element={<AcceptInvitation />}
+          />
+
+          {/* Legacy Admin password setup route. */}
 
           <Route
             path="/setup-admin-password"
             element={<SetupAdminPassword />}
           />
 
-          {/* Authenticated application */}
+          {/* AUTHENTICATED APPLICATION */}
 
           <Route element={<ProtectedRoute />}>
-            {/* Unauthorized page */}
+            {/* UNAUTHORIZED PAGE */}
 
             <Route
               path="/unauthorized"
               element={<Unauthorized />}
             />
 
-            {/* Main application layout */}
+            {/* MAIN APPLICATION LAYOUT */}
 
             <Route element={<MainLayout />}>
-              {/* Dashboard */}
+              {/* DASHBOARD */}
 
               <Route
                 path="/dashboard"
@@ -342,7 +356,7 @@ const AppRoutes = () => {
                 }
               />
 
-              {/* Medicines */}
+              {/* MEDICINES */}
 
               <Route
                 path="/medicines"
@@ -353,7 +367,7 @@ const AppRoutes = () => {
                 }
               />
 
-              {/* Inventory */}
+              {/* INVENTORY */}
 
               <Route
                 path="/inventory"
@@ -364,7 +378,7 @@ const AppRoutes = () => {
                 }
               />
 
-              {/* Purchase listing */}
+              {/* PURCHASE LISTING */}
 
               <Route
                 path="/purchases"
@@ -375,7 +389,7 @@ const AppRoutes = () => {
                 }
               />
 
-              {/* Purchase details */}
+              {/* PURCHASE DETAILS */}
 
               <Route
                 path="/purchases/:id"
@@ -386,7 +400,7 @@ const AppRoutes = () => {
                 }
               />
 
-              {/* Create purchases */}
+              {/* CREATE PURCHASES */}
 
               <Route
                 path="/purchases/create"
@@ -397,7 +411,7 @@ const AppRoutes = () => {
                 }
               />
 
-              {/* Receive purchases */}
+              {/* RECEIVE PURCHASES */}
 
               <Route
                 path="/purchases/:id/receive"
@@ -408,7 +422,7 @@ const AppRoutes = () => {
                 }
               />
 
-              {/* Suppliers */}
+              {/* SUPPLIERS */}
 
               <Route
                 path="/suppliers"
@@ -419,7 +433,7 @@ const AppRoutes = () => {
                 }
               />
 
-              {/* Sales */}
+              {/* SALES */}
 
               <Route
                 path="/sales"
@@ -430,7 +444,7 @@ const AppRoutes = () => {
                 }
               />
 
-              {/* Customers */}
+              {/* CUSTOMERS */}
 
               <Route
                 path="/customers"
@@ -441,7 +455,7 @@ const AppRoutes = () => {
                 }
               />
 
-              {/* Doctors */}
+              {/* DOCTORS */}
 
               <Route
                 path="/doctors"
@@ -452,7 +466,7 @@ const AppRoutes = () => {
                 }
               />
 
-              {/* Prescriptions */}
+              {/* PRESCRIPTIONS */}
 
               <Route
                 path="/prescriptions"
@@ -463,7 +477,7 @@ const AppRoutes = () => {
                 }
               />
 
-              {/* Analytics */}
+              {/* ANALYTICS */}
 
               <Route
                 path="/analytics"
@@ -474,18 +488,33 @@ const AppRoutes = () => {
                 }
               />
 
-              {/* Admin and Super Admin: User Approvals */}
+              {/* STAFF MANAGEMENT — ADMIN AND SUPER ADMIN */}
+
+              <Route
+                path="/staff-management"
+                element={
+                  <ProtectedPage
+                    allowedRoles={STAFF_MANAGEMENT_ROLES}
+                  >
+                    <StaffManagement />
+                  </ProtectedPage>
+                }
+              />
+
+              {/* LEGACY USER APPROVALS */}
 
               <Route
                 path="/user-approvals"
                 element={
-                  <ProtectedPage allowedRoles={USER_APPROVAL_ROLES}>
+                  <ProtectedPage
+                    allowedRoles={USER_APPROVAL_ROLES}
+                  >
                     <UserApprovals />
                   </ProtectedPage>
                 }
               />
 
-              {/* Super Admin-only: Admin Management */}
+              {/* ADMIN MANAGEMENT — SUPER ADMIN ONLY */}
 
               <Route
                 path="/admin-management"
@@ -496,7 +525,7 @@ const AppRoutes = () => {
                 }
               />
 
-              {/* Admin and Super Admin: Audit Logs */}
+              {/* AUDIT LOGS */}
 
               <Route
                 path="/audit-logs"
@@ -507,7 +536,7 @@ const AppRoutes = () => {
                 }
               />
 
-              {/* Admin and Super Admin: Settings */}
+              {/* SETTINGS */}
 
               <Route
                 path="/settings"
@@ -520,7 +549,7 @@ const AppRoutes = () => {
             </Route>
           </Route>
 
-          {/* Unknown URLs */}
+          {/* UNKNOWN URLS */}
 
           <Route
             path="*"

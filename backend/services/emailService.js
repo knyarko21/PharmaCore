@@ -2,9 +2,9 @@
 const { Resend } = require("resend");
 const nodemailer = require("nodemailer");
 
-// ======================================================
+// =====================================================
 // CONFIGURATION
-// ======================================================
+// =====================================================
 
 const getBackendUrl = () => {
   const backendUrl =
@@ -52,9 +52,9 @@ const getSender = () => {
   );
 };
 
-// ======================================================
+// =====================================================
 // MAILTRAP SMTP TRANSPORT
-// ======================================================
+// =====================================================
 
 const getMailtrapTransport = () => {
   const host =
@@ -90,12 +90,14 @@ const getMailtrapTransport = () => {
   });
 };
 
-// ======================================================
+// =====================================================
 // ROLE LABELS
-// ======================================================
+// =====================================================
 
 const getRoleLabel = (role) => {
   const roleLabels = {
+    superadmin: "Super Administrator",
+    admin: "Administrator",
     pharmacist: "Pharmacist",
     cashier: "Cashier",
     inventory_manager: "Inventory Manager",
@@ -105,9 +107,9 @@ const getRoleLabel = (role) => {
   return roleLabels[role] || "Staff Member";
 };
 
-// ======================================================
+// =====================================================
 // HTML HELPERS
-// ======================================================
+// =====================================================
 
 const escapeHtml = (value = "") => {
   return String(value).replace(/[&<>"']/g, (character) => {
@@ -326,9 +328,9 @@ const createEmailTemplate = ({
   `;
 };
 
-// ======================================================
+// =====================================================
 // SHARED EMAIL SENDER
-// ======================================================
+// =====================================================
 
 const sendEmail = async ({
   to,
@@ -375,9 +377,9 @@ const sendEmail = async ({
 
   const provider = getEmailProvider();
 
-  // --------------------------------------------------
+  // ---------------------------------------------------
   // MAILTRAP EMAIL SANDBOX
-  // --------------------------------------------------
+  // ---------------------------------------------------
 
   if (provider === "mailtrap") {
     const transporter = getMailtrapTransport();
@@ -397,9 +399,9 @@ const sendEmail = async ({
     return info;
   }
 
-  // --------------------------------------------------
+  // ---------------------------------------------------
   // RESEND EMAIL DELIVERY
-  // --------------------------------------------------
+  // ---------------------------------------------------
 
   if (provider === "resend") {
     const resend = getResendClient();
@@ -415,9 +417,7 @@ const sendEmail = async ({
     if (error) {
       console.error("Resend email delivery failed:", error);
 
-      throw new Error(
-        error.message || "Unable to send email."
-      );
+      throw new Error(error.message || "Unable to send email.");
     }
 
     console.log(
@@ -432,9 +432,9 @@ const sendEmail = async ({
   );
 };
 
-// ======================================================
+// =====================================================
 // EMAIL VERIFICATION
-// ======================================================
+// =====================================================
 
 const sendVerificationEmail = async ({
   email,
@@ -458,9 +458,55 @@ const sendVerificationEmail = async ({
   });
 };
 
-// ======================================================
-// ADMIN PASSWORD SETUP
-// ======================================================
+// =====================================================
+// NEW USER INVITATION
+// Used for invited staff and Admin accounts.
+// The invitation token is accepted through the frontend.
+// =====================================================
+
+const sendUserInvitationEmail = async ({
+  email,
+  firstName,
+  role,
+  token,
+  inviterName,
+}) => {
+  if (!token) {
+    throw new Error("An invitation token is required.");
+  }
+
+  const roleLabel = getRoleLabel(role);
+
+  const invitationUrl =
+    `${getFrontendUrl()}/accept-invitation?token=${encodeURIComponent(token)}`;
+
+  const isAdmin = role === "admin";
+
+  const inviterText = inviterName
+    ? `${inviterName} has invited you`
+    : "You have been invited";
+
+  const message = isAdmin
+    ? `${inviterText} to join PharmaCore as an ${roleLabel}.\n\nUse the invitation link below to create your password and complete your account setup. Your account will remain inactive until the Super Admin activates it.`
+    : `${inviterText} to join PharmaCore as a ${roleLabel}.\n\nUse the invitation link below to create your password and activate your account. Your assigned role has already been selected by the inviting administrator.`;
+
+  return sendEmail({
+    to: email,
+    subject: `You have been invited to PharmaCore as ${roleLabel}`,
+    firstName,
+    heading: "Your PharmaCore invitation",
+    message,
+    buttonText: "Accept Invitation",
+    buttonUrl: invitationUrl,
+    footerMessage:
+      "This invitation link is valid for 24 hours and can only be used once. If you were not expecting this invitation, please contact your PharmaCore administrator.",
+  });
+};
+
+// =====================================================
+// LEGACY ADMIN PASSWORD SETUP
+// Retained for existing Admin invitations.
+// =====================================================
 
 const sendAdminPasswordSetupEmail = async ({
   email,
@@ -484,10 +530,10 @@ const sendAdminPasswordSetupEmail = async ({
   });
 };
 
-// ======================================================
-// NEW STAFF REGISTRATION NOTIFICATION
+// =====================================================
+// LEGACY STAFF REGISTRATION NOTIFICATION
 // Sent ONLY to the Super Admin by authController.
-// ======================================================
+// =====================================================
 
 const sendNewStaffRegistrationNotificationEmail = async ({
   email,
@@ -519,9 +565,10 @@ const sendNewStaffRegistrationNotificationEmail = async ({
   });
 };
 
-// ======================================================
+// =====================================================
 // STAFF APPROVAL NOTIFICATION
-// ======================================================
+// Retained for legacy applications.
+// =====================================================
 
 const sendStaffApprovalEmail = async ({
   email,
@@ -549,9 +596,10 @@ const sendStaffApprovalEmail = async ({
   });
 };
 
-// ======================================================
+// =====================================================
 // STAFF REJECTION NOTIFICATION
-// ======================================================
+// Retained for legacy applications.
+// =====================================================
 
 const sendStaffRejectionEmail = async ({
   email,
@@ -569,12 +617,13 @@ const sendStaffRejectionEmail = async ({
   });
 };
 
-// ======================================================
+// =====================================================
 // EXPORTS
-// ======================================================
+// =====================================================
 
 module.exports = {
   sendVerificationEmail,
+  sendUserInvitationEmail,
   sendAdminPasswordSetupEmail,
   sendNewStaffRegistrationNotificationEmail,
   sendStaffApprovalEmail,

@@ -1,5 +1,6 @@
 
-import { useCallback, useEffect, useState } from "react";
+
+import { useEffect, useState } from "react";
 
 import {
   AlertCircle,
@@ -51,9 +52,9 @@ const getAccountStatus = (admin) => {
     };
   }
 
-  if (!admin.isEmailVerified) {
+  if (!admin.invitationAcceptedAt) {
     return {
-      label: "Awaiting verification",
+      label: "Invitation pending",
       className:
         "bg-amber-500/10 text-amber-400 border-amber-500/20",
     };
@@ -68,10 +69,19 @@ const getAccountStatus = (admin) => {
   }
 
   return {
-    label: "Inactive",
+    label: "Awaiting activation",
     className:
       "bg-zinc-500/10 text-zinc-400 border-zinc-500/20",
   };
+};
+
+const getAdminList = (response) => {
+  const adminList =
+    response.data?.admins ||
+    response.data?.users ||
+    [];
+
+  return Array.isArray(adminList) ? adminList : [];
 };
 
 // ======================================================
@@ -99,38 +109,57 @@ const AdminManagement = () => {
   const [success, setSuccess] = useState("");
 
   // ====================================================
-  // Fetch Admin Accounts
+  // Initial Admin Accounts Fetch
   // ====================================================
 
-  const fetchAdmins = useCallback(async (showRefresh = false) => {
-    try {
-      if (showRefresh) {
-        setRefreshing(true);
-      } else {
-        setLoading(true);
-      }
+  useEffect(() => {
+    let cancelled = false;
 
-      setError("");
+    const loadAdmins = async () => {
+      try {
+        const response = await api.get("/users/admins");
+
+        if (cancelled) return;
+
+        setAdmins(getAdminList(response));
+        setError("");
+      } catch (err) {
+        if (cancelled) return;
+
+        setError(getErrorMessage(err));
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    };
+
+    loadAdmins();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // ====================================================
+  // Refresh Admin Accounts
+  // ====================================================
+
+  const fetchAdmins = async () => {
+    try {
+      setRefreshing(true);
 
       const response = await api.get("/users/admins");
 
-      const adminList =
-        response.data?.admins ||
-        response.data?.users ||
-        [];
-
-      setAdmins(Array.isArray(adminList) ? adminList : []);
+      setAdmins(getAdminList(response));
+      setError("");
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
-
-  useEffect(() => {
-    fetchAdmins();
-  }, [fetchAdmins]);
+  };
 
   // ====================================================
   // Form Handling
@@ -189,7 +218,7 @@ const AdminManagement = () => {
       resetForm();
       setShowInviteForm(false);
 
-      await fetchAdmins(true);
+      await fetchAdmins();
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -203,7 +232,7 @@ const AdminManagement = () => {
 
   const handleResendInvitation = async (admin) => {
     const confirmed = window.confirm(
-      `Resend the invitation to ${admin.email}?`
+      `Resend the invitation to ${admin.email}? The previous invitation link will no longer work.`
     );
 
     if (!confirmed) return;
@@ -223,7 +252,7 @@ const AdminManagement = () => {
           `Invitation email sent to ${admin.email}.`
       );
 
-      await fetchAdmins(true);
+      await fetchAdmins();
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -264,7 +293,7 @@ const AdminManagement = () => {
           `Admin account ${action}d successfully.`
       );
 
-      await fetchAdmins(true);
+      await fetchAdmins();
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -282,8 +311,8 @@ const AdminManagement = () => {
     (admin) => admin.isActive
   ).length;
 
-  const awaitingVerification = admins.filter(
-    (admin) => !admin.isEmailVerified
+  const pendingInvitations = admins.filter(
+    (admin) => !admin.invitationAcceptedAt
   ).length;
 
   const inactiveAdmins = totalAdmins - activeAdmins;
@@ -312,15 +341,15 @@ const AdminManagement = () => {
           </h1>
 
           <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-400">
-            Create administrator invitations, monitor account
-            verification, and manage administrator access.
+            Create administrator invitations, monitor invitation
+            acceptance, and manage administrator access.
           </p>
         </div>
 
         <div className="flex flex-wrap gap-3">
           <button
             type="button"
-            onClick={() => fetchAdmins(true)}
+            onClick={fetchAdmins}
             disabled={refreshing}
             className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-medium text-zinc-300 transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -454,18 +483,18 @@ const AdminManagement = () => {
         <div className="rounded-2xl border border-white/[0.07] bg-white/[0.035] p-5">
           <div className="flex items-center justify-between">
             <span className="text-sm text-zinc-400">
-              Awaiting Verification
+              Pending Invitations
             </span>
 
             <Clock className="text-amber-400" size={20} />
           </div>
 
           <p className="mt-4 text-3xl font-bold tabular-nums">
-            {awaitingVerification}
+            {pendingInvitations}
           </p>
 
           <p className="mt-1 text-xs text-zinc-500">
-            Admins who have not verified email
+            Admins who have not accepted invitations
           </p>
         </div>
 
@@ -487,9 +516,10 @@ const AdminManagement = () => {
               </div>
 
               <p className="mt-2 text-sm leading-6 text-zinc-400">
-                The invited person will receive an email
-                verification link followed by a password setup link.
-                Their account remains inactive until you activate it.
+                The invited person will receive one email invitation
+                link to verify their email address and create their
+                password. Their account will remain inactive until
+                you activate it after they accept the invitation.
               </p>
             </div>
 
@@ -619,7 +649,7 @@ const AdminManagement = () => {
             </h2>
 
             <p className="mt-1 text-sm text-zinc-500">
-              Manage invitations, verification, and account access.
+              Manage invitations, acceptance, and account access.
             </p>
           </div>
 
@@ -664,7 +694,7 @@ const AdminManagement = () => {
                   </th>
 
                   <th className="px-5 py-4 font-semibold">
-                    Email Verification
+                    Invitation
                   </th>
 
                   <th className="px-5 py-4 font-semibold">
@@ -691,11 +721,13 @@ const AdminManagement = () => {
 
                   const canActivate =
                     admin.approvalStatus === "approved" &&
-                    admin.isEmailVerified;
+                    admin.isEmailVerified &&
+                    Boolean(admin.invitationAcceptedAt);
 
                   const canResendInvitation =
                     !admin.isActive &&
-                    admin.approvalStatus === "approved";
+                    admin.approvalStatus === "approved" &&
+                    !admin.invitationAcceptedAt;
 
                   const isUpdating =
                     updatingAdminId === admin.id;
@@ -725,10 +757,10 @@ const AdminManagement = () => {
                       </td>
 
                       <td className="px-5 py-5">
-                        {admin.isEmailVerified ? (
+                        {admin.invitationAcceptedAt ? (
                           <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-400">
                             <CheckCircle2 size={14} />
-                            Verified
+                            Accepted
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-400">
@@ -765,7 +797,7 @@ const AdminManagement = () => {
                                 handleResendInvitation(admin)
                               }
                               disabled={isUpdating}
-                              title="Resend the Admin invitation or password setup email"
+                              title="Resend the Admin invitation. The previous link will be invalidated."
                               className="inline-flex items-center justify-center gap-2 rounded-lg border border-violet-500/20 bg-violet-500/10 px-3 py-2 text-xs font-semibold text-violet-300 transition hover:bg-violet-500/20 disabled:cursor-not-allowed disabled:opacity-40"
                             >
                               {isUpdating ? (
@@ -792,7 +824,7 @@ const AdminManagement = () => {
                             }
                             title={
                               !admin.isActive && !canActivate
-                                ? "The Admin must be approved and verify their email before activation."
+                                ? "The Admin must accept the invitation before you can activate the account."
                                 : admin.isActive
                                   ? "Deactivate this Admin"
                                   : "Activate this Admin"
@@ -847,8 +879,9 @@ const AdminManagement = () => {
           <p className="mt-1 text-sm leading-6 text-zinc-400">
             Only the Super Admin can create administrator invitations
             and activate or deactivate administrator accounts.
-            An administrator must verify their email and complete
-            password setup before their account can be activated.
+            An invited administrator must accept the invitation and
+            create a password before the Super Admin can activate
+            their account.
           </p>
         </div>
       </div>

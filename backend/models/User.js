@@ -5,18 +5,18 @@ const sequelize = require("../config/database");
 const User = sequelize.define(
   "User",
   {
-    // ==========================================
+    // =========================================
     // Primary Key
-    // ==========================================
+    // =========================================
     id: {
       type: DataTypes.INTEGER,
       primaryKey: true,
       autoIncrement: true,
     },
 
-    // ==========================================
+    // =========================================
     // Personal Information
-    // ==========================================
+    // =========================================
     firstName: {
       type: DataTypes.STRING,
       allowNull: false,
@@ -44,32 +44,26 @@ const User = sequelize.define(
       },
     },
 
-    // ==========================================
+    // =========================================
     // Authentication
-    // ==========================================
+    // =========================================
     password: {
       type: DataTypes.STRING,
       allowNull: false,
     },
 
-    // ==========================================
+    // =========================================
     // User Role
-    // ==========================================
+    // =========================================
     role: {
       type: DataTypes.STRING,
       allowNull: false,
       defaultValue: "cashier",
     },
 
-    // ==========================================
-    // Requested Staff Role
-    //
-    // Stores the role selected during public
-    // registration.
-    //
-    // This does NOT grant permissions.
-    // The actual role is assigned after approval.
-    // ==========================================
+    // Retained for compatibility with existing
+    // accounts and the previous registration flow.
+    // New invitations assign the actual role directly.
     requestedRole: {
       type: DataTypes.STRING,
       allowNull: true,
@@ -86,9 +80,9 @@ const User = sequelize.define(
       },
     },
 
-    // ==========================================
+    // =========================================
     // Account Status
-    // ==========================================
+    // =========================================
     isActive: {
       type: DataTypes.BOOLEAN,
       allowNull: false,
@@ -105,9 +99,11 @@ const User = sequelize.define(
       defaultValue: "pending",
     },
 
-    // ==========================================
-    // Email Verification
-    // ==========================================
+    // =========================================
+    // Existing Email Verification
+    // Retained for existing accounts and
+    // backward compatibility.
+    // =========================================
     isEmailVerified: {
       type: DataTypes.BOOLEAN,
       allowNull: false,
@@ -124,26 +120,57 @@ const User = sequelize.define(
       type: DataTypes.DATE,
       allowNull: true,
     },
+
+    // =========================================
+    // New Invitation System
+    // =========================================
+
+    // SHA-256 hash of the invitation token.
+    // The original token is never stored.
+    invitationTokenHash: {
+      type: DataTypes.STRING(64),
+      allowNull: true,
+      unique: true,
+    },
+
+    // Invitation expiration timestamp.
+    invitationExpiresAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+
+    // User ID of the Admin or Super Admin
+    // who created the invitation.
+    invitedByUserId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
+
+    // Records successful invitation acceptance.
+    invitationAcceptedAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
   },
 
   {
     tableName: "users",
     timestamps: true,
 
-    // ==========================================
+    // =========================================
     // Default Scope
     // Never expose passwords in ordinary queries.
-    // ==========================================
+    // =========================================
     defaultScope: {
       attributes: {
         exclude: ["password"],
       },
     },
 
-    // ==========================================
+    // =========================================
     // Authentication Scope
-    // Explicitly retrieve the password when needed.
-    // ==========================================
+    // Explicitly retrieve passwords when needed.
+    // =========================================
     scopes: {
       withPassword: {
         attributes: {

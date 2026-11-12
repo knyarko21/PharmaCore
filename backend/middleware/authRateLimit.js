@@ -1,19 +1,19 @@
 
 const { rateLimit } = require("express-rate-limit");
 
-// ======================================================
+// =====================================================
 // SHARED RATE LIMITER SETTINGS
-// ======================================================
+// =====================================================
 
 const standardOptions = {
   standardHeaders: true,
   legacyHeaders: false,
 };
 
-// ======================================================
+// =====================================================
 // LOGIN RATE LIMITER
-// 10 attempts per IP address every 15 minutes.
-// ======================================================
+// 10 attempts per IP every 15 minutes.
+// =====================================================
 
 const loginLimiter = rateLimit({
   ...standardOptions,
@@ -26,10 +26,11 @@ const loginLimiter = rateLimit({
   },
 });
 
-// ======================================================
+// =====================================================
 // REGISTRATION RATE LIMITER
-// 5 registration attempts per IP address per hour.
-// ======================================================
+// 5 attempts per IP every hour.
+// Retained temporarily for legacy registration.
+// =====================================================
 
 const registrationLimiter = rateLimit({
   ...standardOptions,
@@ -42,11 +43,10 @@ const registrationLimiter = rateLimit({
   },
 });
 
-// ======================================================
+// =====================================================
 // EMAIL VERIFICATION RATE LIMITER
-// 20 attempts per IP address every 15 minutes.
-// Shared by GET and POST verification routes.
-// ======================================================
+// 20 attempts per IP every 15 minutes.
+// =====================================================
 
 const emailVerificationLimiter = rateLimit({
   ...standardOptions,
@@ -59,10 +59,10 @@ const emailVerificationLimiter = rateLimit({
   },
 });
 
-// ======================================================
+// =====================================================
 // RESEND VERIFICATION EMAIL RATE LIMITER
-// 3 attempts per IP address per hour.
-// ======================================================
+// 3 attempts per IP every hour.
+// =====================================================
 
 const resendVerificationLimiter = rateLimit({
   ...standardOptions,
@@ -75,10 +75,11 @@ const resendVerificationLimiter = rateLimit({
   },
 });
 
-// ======================================================
+// =====================================================
 // ADMIN PASSWORD SETUP RATE LIMITER
-// 5 attempts per IP address every 15 minutes.
-// ======================================================
+// 5 attempts per IP every 15 minutes.
+// Retained for existing Admin invitations.
+// =====================================================
 
 const adminSetupLimiter = rateLimit({
   ...standardOptions,
@@ -91,9 +92,25 @@ const adminSetupLimiter = rateLimit({
   },
 });
 
-// ======================================================
+// =====================================================
+// INVITATION ACCEPTANCE RATE LIMITER
+// 5 attempts per IP every 15 minutes.
+// =====================================================
+
+const invitationAcceptanceLimiter = rateLimit({
+  ...standardOptions,
+  windowMs: 15 * 60 * 1000,
+  limit: 5,
+  message: {
+    success: false,
+    message:
+      "Too many invitation acceptance attempts. Please try again after 15 minutes.",
+  },
+});
+
+// =====================================================
 // EXPORT RATE LIMITERS
-// ======================================================
+// =====================================================
 
 module.exports = {
   loginLimiter,
@@ -101,4 +118,5 @@ module.exports = {
   emailVerificationLimiter,
   resendVerificationLimiter,
   adminSetupLimiter,
+  invitationAcceptanceLimiter,
 };

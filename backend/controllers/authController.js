@@ -1,6 +1,7 @@
 
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const crypto = require("crypto");
 
 const { User, sequelize } = require("../models");
 const { createAuditLog } = require("../services/auditLogService");
@@ -21,6 +22,7 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PASSWORD_MIN_LENGTH = 8;
 const BCRYPT_MAX_BYTES = 72;
 const BCRYPT_ROUNDS = 12;
+const INVITATION_TOKEN_LENGTH = 64;
 
 const STAFF_ROLES = [
   "pharmacist",
@@ -29,9 +31,9 @@ const STAFF_ROLES = [
   "procurement",
 ];
 
-// ======================================================
-// General Helpers
-// ======================================================
+// =====================================================
+// GENERAL HELPERS
+// =====================================================
 
 const sendError = (res, status, message) =>
   res.status(status).json({
@@ -127,16 +129,19 @@ const writeAuditLog = async ({
   }
 };
 
-// ======================================================
-// Registration
+const hashInvitationToken = (token) =>
+  crypto
+    .createHash("sha256")
+    .update(token)
+    .digest("hex");
+
+// =====================================================
+// LEGACY PUBLIC REGISTRATION
 // POST /api/auth/register
 //
-// Public registration:
-// - Accepts only permitted staff roles.
-// - Stores the selected role in requestedRole.
-// - Keeps actual role as cashier until approval.
-// - Never permits public Admin/Super Admin creation.
-// ======================================================
+// Retained temporarily while invitation onboarding
+// is implemented and tested.
+// =====================================================
 
 const register = async (req, res) => {
   try {
@@ -307,10 +312,10 @@ const register = async (req, res) => {
   }
 };
 
-// ======================================================
-// Resend Verification Email
+// =====================================================
+// RESEND VERIFICATION EMAIL
 // POST /api/auth/resend-verification
-// ======================================================
+// =====================================================
 
 const resendVerificationEmail = async (req, res) => {
   try {
@@ -430,21 +435,13 @@ const resendVerificationEmail = async (req, res) => {
   }
 };
 
-// ======================================================
-// Verify Email
+// =====================================================
+// VERIFY EMAIL
 // GET /api/auth/verify-email/:token
 // POST /api/auth/verify-email
 //
-// Token consumption is protected by a database
-// transaction and row-level lock.
-//
-// Ordinary staff applicants:
-// 1. Verify their email.
-// 2. Remain pending approval.
-// 3. Super Admin receives an application notification.
-//
-// Invited Admins retain their separate password setup flow.
-// ======================================================
+// Retained for legacy registrations and Admin setup.
+// =====================================================
 
 const verifyEmail = async (req, res) => {
   try {
@@ -462,99 +459,84 @@ const verifyEmail = async (req, res) => {
       );
     }
 
-    // ==================================================
-    // ATOMIC TOKEN VALIDATION AND CONSUMPTION
-    // ==================================================
-
-    const verificationResult = await sequelize.transaction(
-      async (transaction) => {
-        const user = await User.findOne({
-          where: {
-            emailVerificationToken: verificationToken,
-          },
-          transaction,
-          lock: transaction.LOCK.UPDATE,
-        });
-
-        if (!user) {
-          return {
-            error: {
-              status: 400,
-              message:
-                "Invalid or expired verification token.",
+    const verificationResult =
+      await sequelize.transaction(
+        async (transaction) => {
+          const user = await User.findOne({
+            where: {
+              emailVerificationToken: verificationToken,
             },
-          };
-        }
+            transaction,
+            lock: transaction.LOCK.UPDATE,
+          });
 
-        const expiresAt =
-          user.emailVerificationExpiresAt;
+          if (!user) {
+            return {
+              error: {
+                status: 400,
+                message:
+                  "Invalid or expired verification token.",
+              },
+            };
+          }
 
-        if (
-          !expiresAt ||
-          new Date(expiresAt).getTime() <= Date.now()
-        ) {
-          return {
-            error: {
-              status: 400,
-              message:
-                "Your verification link has expired. Please request a new one.",
-            },
-          };
-        }
+          const expiresAt =
+            user.emailVerificationExpiresAt;
 
-        user.isEmailVerified = true;
+          if (
+            !expiresAt ||
+            new Date(expiresAt).getTime() <= Date.now()
+          ) {
+            return {
+              error: {
+                status: 400,
+                message:
+                  "Your verification link has expired. Please request a new one.",
+              },
+            };
+          }
 
-        // ----------------------------------------------
-        // INVITED ADMIN PASSWORD SETUP
-        // ----------------------------------------------
+          user.isEmailVerified = true;
 
-        if (
-          user.role === "admin" &&
-          user.approvalStatus === "approved"
-        ) {
-          const passwordSetupToken =
-            generateVerificationToken();
+          if (
+            user.role === "admin" &&
+            user.approvalStatus === "approved"
+          ) {
+            const passwordSetupToken =
+              generateVerificationToken();
 
-          user.emailVerificationToken =
-            passwordSetupToken;
+            user.emailVerificationToken =
+              passwordSetupToken;
 
-          user.emailVerificationExpiresAt =
-            getVerificationExpiry();
+            user.emailVerificationExpiresAt =
+              getVerificationExpiry();
+
+            await user.save({ transaction });
+
+            return {
+              type: "admin",
+              userId: user.id,
+              email: user.email,
+              firstName: user.firstName,
+              passwordSetupToken,
+            };
+          }
+
+          user.emailVerificationToken = null;
+          user.emailVerificationExpiresAt = null;
 
           await user.save({ transaction });
 
           return {
-            type: "admin",
+            type: "staff",
             userId: user.id,
-            email: user.email,
             firstName: user.firstName,
-            passwordSetupToken,
+            lastName: user.lastName,
+            email: user.email,
+            requestedRole: user.requestedRole,
           };
         }
-
-        // ----------------------------------------------
-        // ORDINARY STAFF EMAIL VERIFICATION
-        // ----------------------------------------------
-
-        user.emailVerificationToken = null;
-        user.emailVerificationExpiresAt = null;
-
-        await user.save({ transaction });
-
-        return {
-          type: "staff",
-          userId: user.id,
-          firstName: user.firstName,
-          lastName: user.lastName,
-          email: user.email,
-          requestedRole: user.requestedRole,
-        };
-      }
-    );
-
-    // ==================================================
-    // HANDLE TRANSACTION RESULT
-    // ==================================================
+      );
 
     if (verificationResult.error) {
       return sendError(
@@ -563,11 +545,6 @@ const verifyEmail = async (req, res) => {
         verificationResult.error.message
       );
     }
-
-    // ==================================================
-    // INVITED ADMIN PASSWORD SETUP EMAIL
-    // Send only after the transaction commits.
-    // ==================================================
 
     if (verificationResult.type === "admin") {
       try {
@@ -614,10 +591,6 @@ const verifyEmail = async (req, res) => {
       });
     }
 
-    // ==================================================
-    // ORDINARY STAFF AUDIT LOG
-    // ==================================================
-
     await writeAuditLog({
       req,
       userId: verificationResult.userId,
@@ -626,10 +599,6 @@ const verifyEmail = async (req, res) => {
         `User ${verificationResult.userId} verified their email address.`,
       entityId: verificationResult.userId,
     });
-
-    // ==================================================
-    // NOTIFY SUPER ADMIN ABOUT STAFF APPLICATION
-    // ==================================================
 
     let notificationSent = false;
 
@@ -713,13 +682,227 @@ const verifyEmail = async (req, res) => {
   }
 };
 
-// ======================================================
-// Set Admin Password
+// =====================================================
+// ACCEPT INVITATION
+// POST /api/auth/accept-invitation
+//
+// Invitation tokens are stored as SHA-256 hashes.
+// The transaction and row lock prevent token reuse.
+// =====================================================
+
+const acceptInvitation = async (req, res) => {
+  try {
+    const {
+      token,
+      password,
+      confirmPassword,
+    } = req.body || {};
+
+    if (
+      typeof token !== "string" ||
+      !token.trim() ||
+      typeof password !== "string" ||
+      !password ||
+      typeof confirmPassword !== "string" ||
+      !confirmPassword
+    ) {
+      return sendError(
+        res,
+        400,
+        "Invitation token, password and confirmation are required."
+      );
+    }
+
+    if (
+      token.length !== INVITATION_TOKEN_LENGTH ||
+      !/^[a-f0-9]+$/i.test(token)
+    ) {
+      return sendError(
+        res,
+        400,
+        "Invalid or expired invitation link."
+      );
+    }
+
+    const passwordError = validatePassword(password);
+
+    if (passwordError) {
+      return sendError(res, 400, passwordError);
+    }
+
+    if (password !== confirmPassword) {
+      return sendError(
+        res,
+        400,
+        "Password and confirmation do not match."
+      );
+    }
+
+    const tokenHash = hashInvitationToken(token);
+
+    const acceptanceResult =
+      await sequelize.transaction(
+        async (transaction) => {
+          const user = await User.findOne({
+            where: {
+              invitationTokenHash: tokenHash,
+            },
+            transaction,
+            lock: transaction.LOCK.UPDATE,
+          });
+
+          if (!user) {
+            return {
+              error: {
+                status: 400,
+                message:
+                  "This invitation is invalid, expired, or has already been used.",
+              },
+            };
+          }
+
+          if (
+            !user.invitationExpiresAt ||
+            new Date(user.invitationExpiresAt).getTime() <=
+              Date.now()
+          ) {
+            return {
+              error: {
+                status: 400,
+                message:
+                  "This invitation has expired. Contact your administrator for a new invitation.",
+              },
+            };
+          }
+
+          if (user.invitationAcceptedAt) {
+            return {
+              error: {
+                status: 409,
+                message:
+                  "This invitation has already been accepted.",
+              },
+            };
+          }
+
+          if (
+            user.role !== "admin" &&
+            !STAFF_ROLES.includes(user.role)
+          ) {
+            return {
+              error: {
+                status: 403,
+                message:
+                  "This invitation is not valid for this account.",
+              },
+            };
+          }
+
+          if (user.isActive) {
+            return {
+              error: {
+                status: 409,
+                message:
+                  "This account is already active. Please sign in.",
+              },
+            };
+          }
+
+          if (
+            user.approvalStatus === "rejected"
+          ) {
+            return {
+              error: {
+                status: 403,
+                message:
+                  "This account is not eligible to accept an invitation.",
+              },
+            };
+          }
+
+          const hashedPassword = await bcrypt.hash(
+            password,
+            BCRYPT_ROUNDS
+          );
+
+          user.password = hashedPassword;
+
+          user.invitationTokenHash = null;
+          user.invitationExpiresAt = null;
+          user.invitationAcceptedAt = new Date();
+
+          user.isEmailVerified = true;
+          user.approvalStatus = "approved";
+
+          user.emailVerificationToken = null;
+          user.emailVerificationExpiresAt = null;
+
+          // Staff accounts become active after accepting.
+          // Admin accounts still require Super Admin activation.
+          if (user.role === "admin") {
+            user.isActive = false;
+          } else {
+            user.isActive = true;
+          }
+
+          await user.save({ transaction });
+
+          return {
+            success: true,
+            userId: user.id,
+            role: user.role,
+            isActive: user.isActive,
+          };
+        }
+      );
+
+    if (acceptanceResult.error) {
+      return sendError(
+        res,
+        acceptanceResult.error.status,
+        acceptanceResult.error.message
+      );
+    }
+
+    await writeAuditLog({
+      req,
+      userId: acceptanceResult.userId,
+      action: "invitation_accepted",
+      description:
+        acceptanceResult.role === "admin"
+          ? `Admin invitation for user ${acceptanceResult.userId} was accepted. Account remains inactive pending Super Admin activation.`
+          : `Staff invitation for user ${acceptanceResult.userId} was accepted. Staff account is now active.`,
+      entityId: acceptanceResult.userId,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message:
+        acceptanceResult.role === "admin"
+          ? "Invitation accepted and password created successfully. Your account is waiting for Super Admin activation before you can sign in."
+          : "Invitation accepted successfully. Your account is now active. You can sign in.",
+      account: {
+        role: acceptanceResult.role,
+        isActive: acceptanceResult.isActive,
+      },
+    });
+  } catch (error) {
+    logError("Accept invitation error:", error);
+
+    return sendError(
+      res,
+      500,
+      "Unable to accept invitation."
+    );
+  }
+};
+
+// =====================================================
+// LEGACY ADMIN PASSWORD SETUP
 // POST /api/auth/setup-admin-password
 //
-// The database transaction and row-level lock prevent
-// simultaneous reuse of the same password setup token.
-// ======================================================
+// Retained for existing Admin invitations.
+// =====================================================
 
 const setupAdminPassword = async (req, res) => {
   try {
@@ -757,10 +940,6 @@ const setupAdminPassword = async (req, res) => {
         "Password and confirmation do not match."
       );
     }
-
-    // ==================================================
-    // ATOMIC TOKEN VALIDATION AND PASSWORD SETUP
-    // ==================================================
 
     const setupResult = await sequelize.transaction(
       async (transaction) => {
@@ -839,10 +1018,6 @@ const setupAdminPassword = async (req, res) => {
       }
     );
 
-    // ==================================================
-    // HANDLE TRANSACTION RESULT
-    // ==================================================
-
     if (setupResult.error) {
       return sendError(
         res,
@@ -850,10 +1025,6 @@ const setupAdminPassword = async (req, res) => {
         setupResult.error.message
       );
     }
-
-    // ==================================================
-    // AUDIT LOG AFTER SUCCESSFUL COMMIT
-    // ==================================================
 
     await writeAuditLog({
       req,
@@ -883,10 +1054,10 @@ const setupAdminPassword = async (req, res) => {
   }
 };
 
-// ======================================================
-// Login
+// =====================================================
+// LOGIN
 // POST /api/auth/login
-// ======================================================
+// =====================================================
 
 const login = async (req, res) => {
   try {
@@ -1009,10 +1180,10 @@ const login = async (req, res) => {
   }
 };
 
-// ======================================================
-// Update Profile
+// =====================================================
+// UPDATE PROFILE
 // PUT /api/auth/profile
-// ======================================================
+// =====================================================
 
 const updateProfile = async (req, res) => {
   try {
@@ -1148,10 +1319,10 @@ const updateProfile = async (req, res) => {
   }
 };
 
-// ======================================================
-// Change Password
+// =====================================================
+// CHANGE PASSWORD
 // PUT /api/auth/password
-// ======================================================
+// =====================================================
 
 const changePassword = async (req, res) => {
   try {
@@ -1286,14 +1457,15 @@ const changePassword = async (req, res) => {
   }
 };
 
-// ======================================================
-// Exports
-// ======================================================
+// =====================================================
+// EXPORTS
+// =====================================================
 
 module.exports = {
   register,
   resendVerificationEmail,
   verifyEmail,
+  acceptInvitation,
   setupAdminPassword,
   login,
   updateProfile,

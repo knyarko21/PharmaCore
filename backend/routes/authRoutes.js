@@ -1,106 +1,101 @@
 
+
 const express = require("express");
 
 const {
-  login,
-  register,
-  resendVerificationEmail,
-  verifyEmail,
-  setupAdminPassword,
-  updateProfile,
-  changePassword,
-} = require("../controllers/authController");
+  createAdmin,
+  resendAdminInvitation,
+  getAdmins,
 
-const {
-  loginLimiter,
-  registrationLimiter,
-  emailVerificationLimiter,
-  resendVerificationLimiter,
-  adminSetupLimiter,
-} = require("../middleware/authRateLimit");
+  createStaffInvitation,
+  resendStaffInvitation,
+  getStaff,
+
+  getUsers,
+  reviewUserRegistration,
+  updateUserActivation,
+} = require("../controllers/userController");
 
 const { authenticate } = require("../middleware/authMiddleware");
-
-// ======================================================
-// ROUTER
-// ======================================================
+const { authorize } = require("../middleware/roleMiddleware");
 
 const router = express.Router();
 
-// ======================================================
-// PUBLIC AUTHENTICATION ROUTES
-// ======================================================
+// All user management routes require authentication.
+router.use(authenticate);
 
-// POST /api/auth/login
-router.post("/login", loginLimiter, login);
+// =====================================================
+// ADMIN MANAGEMENT
+// Super Admin only
+// =====================================================
 
-// POST /api/auth/register
-router.post("/register", registrationLimiter, register);
+router.post(
+  "/admins",
+  authorize("superadmin"),
+  createAdmin
+);
 
-// ======================================================
-// EMAIL VERIFICATION ROUTES
-// ======================================================
-
-// GET /api/auth/verify-email/:token
 router.get(
-  "/verify-email/:token",
-  emailVerificationLimiter,
-  verifyEmail
+  "/admins",
+  authorize("superadmin"),
+  getAdmins
 );
 
-// POST /api/auth/verify-email
 router.post(
-  "/verify-email",
-  emailVerificationLimiter,
-  verifyEmail
+  "/admins/:id/resend-invitation",
+  authorize("superadmin"),
+  resendAdminInvitation
 );
 
-// POST /api/auth/resend-verification
+// =====================================================
+// STAFF INVITATION MANAGEMENT
+// Admin and Super Admin
+// =====================================================
+
 router.post(
-  "/resend-verification",
-  resendVerificationLimiter,
-  resendVerificationEmail
+  "/invitations",
+  authorize("admin", "superadmin"),
+  createStaffInvitation
 );
 
-// ======================================================
-// ADMIN PASSWORD SETUP
-// ======================================================
+router.get(
+  "/staff",
+  authorize("admin", "superadmin"),
+  getStaff
+);
 
-// POST /api/auth/setup-admin-password
 router.post(
-  "/setup-admin-password",
-  adminSetupLimiter,
-  setupAdminPassword
+  "/invitations/:id/resend",
+  authorize("admin", "superadmin"),
+  resendStaffInvitation
 );
 
-// ======================================================
-// AUTHENTICATED ACCOUNT ROUTES
-// ======================================================
+// =====================================================
+// ACCOUNT LISTING AND LEGACY REGISTRATION APPROVAL
+// Admin and Super Admin
+// =====================================================
 
-// GET /api/auth/me
-router.get("/me", authenticate, (req, res) => {
-  return res.status(200).json({
-    success: true,
-    user: req.user,
-  });
-});
+router.get(
+  "/",
+  authorize("admin", "superadmin"),
+  getUsers
+);
 
-// PUT /api/auth/profile
-router.put("/profile", authenticate, updateProfile);
+router.patch(
+  "/:id/approval",
+  authorize("admin", "superadmin"),
+  reviewUserRegistration
+);
 
-// PUT /api/auth/password
-router.put("/password", authenticate, changePassword);
+// =====================================================
+// ACCOUNT ACTIVATION
+// Controller enforces ownership and role permissions.
+// =====================================================
 
-// POST /api/auth/logout
-router.post("/logout", authenticate, (_req, res) => {
-  return res.status(200).json({
-    success: true,
-    message: "Logged out successfully.",
-  });
-});
-
-// ======================================================
-// EXPORT ROUTER
-// ======================================================
+router.patch(
+  "/:id/activation",
+  authorize("admin", "superadmin"),
+  updateUserActivation
+);
 
 module.exports = router;

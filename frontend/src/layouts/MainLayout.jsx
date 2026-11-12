@@ -88,13 +88,11 @@ const normalizeRole = (role) =>
     .toLowerCase()
     .replace(/[\s-]+/g, "_");
 
-// ======================================================
-// Frontend Role Hierarchy
-// ======================================================
-
-// Super Admin inherits all System Admin permissions.
-// System Admin does not inherit Super Admin permissions.
-// Other staff retain their existing permissions.
+/*
+|--------------------------------------------------------------------------
+| Frontend role hierarchy
+|--------------------------------------------------------------------------
+*/
 
 const ROLE_HIERARCHY = {
   [ROLES.SUPERADMIN]: [
@@ -204,6 +202,12 @@ const NAV_ITEMS = [
     path: "/admin-management",
     icon: ShieldCheck,
     roles: SUPERADMIN_ONLY,
+  },
+  {
+    label: "Staff Management",
+    path: "/staff-management",
+    icon: Users,
+    roles: ADMIN_AND_SUPERADMIN,
   },
   {
     label: "User Approvals",
@@ -370,7 +374,6 @@ const MainLayout = () => {
 
   const userRole = normalizeRole(user?.role);
 
-  // Super Admin inherits System Admin navigation permissions.
   const visibleNavItems = useMemo(
     () =>
       NAV_ITEMS.filter((item) =>
@@ -379,7 +382,6 @@ const MainLayout = () => {
     [userRole]
   );
 
-  // Both Super Admin and System Admin can manage settings.
   const canManageSettings = hasRolePermission(
     userRole,
     [ROLES.ADMIN]
@@ -387,23 +389,29 @@ const MainLayout = () => {
 
   /*
    * Keep read notification status separate for each user.
+   *
+   * No effect is needed to reset state when the user changes.
+   * If the storage key changes, read that user's saved IDs directly.
    */
 
   const userIdentifier = user?.id ?? user?.email ?? "guest";
 
-  const storageKey = `pharmacore_read_inventory_alerts_${userIdentifier}`;
+  const storageKey =
+    `pharmacore_read_inventory_alerts_${userIdentifier}`;
 
   const [readState, setReadState] = useState(() => ({
     key: storageKey,
     ids: loadReadAlertIds(storageKey),
   }));
 
-  useEffect(() => {
-    setReadState({
-      key: storageKey,
-      ids: loadReadAlertIds(storageKey),
-    });
-  }, [storageKey]);
+  const currentReadIds =
+    readState.key === storageKey
+      ? readState.ids
+      : loadReadAlertIds(storageKey);
+
+  /*
+   * Persist notification read status.
+   */
 
   useEffect(() => {
     if (readState.key !== storageKey) return;
@@ -441,12 +449,8 @@ const MainLayout = () => {
    */
 
   const isAlertRead = useCallback(
-    (alertId) => {
-      if (readState.key !== storageKey) return false;
-
-      return readState.ids.includes(alertId);
-    },
-    [readState, storageKey]
+    (alertId) => currentReadIds.includes(alertId),
+    [currentReadIds]
   );
 
   const unreadCount = useMemo(
@@ -761,9 +765,6 @@ const MainLayout = () => {
 
   return (
     <div className="min-h-screen w-full min-w-0 overflow-x-clip bg-[#08080a] text-zinc-100 antialiased">
-
-      {/* Mobile sidebar backdrop */}
-
       {sidebarOpen && (
         <button
           type="button"
@@ -782,7 +783,6 @@ const MainLayout = () => {
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-
         {/* Brand */}
 
         <div className="flex h-20 shrink-0 items-center justify-between border-b border-white/[0.06] px-5 sm:px-6">
@@ -814,7 +814,7 @@ const MainLayout = () => {
           </button>
         </div>
 
-        {/* Role-aware navigation */}
+        {/* Navigation */}
 
         <nav
           className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain px-4 py-6"
@@ -896,11 +896,9 @@ const MainLayout = () => {
       {/* Main content */}
 
       <div className="min-h-screen w-full min-w-0 lg:pl-72">
-
         {/* Header */}
 
         <header className="sticky top-0 z-30 flex h-16 w-full min-w-0 items-center justify-between gap-2 border-b border-white/[0.06] bg-[#08080a] px-3 text-zinc-100 sm:h-20 sm:px-6 lg:px-8">
-
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <button
               type="button"
@@ -924,7 +922,6 @@ const MainLayout = () => {
           </div>
 
           <div className="flex shrink-0 items-center gap-1 sm:gap-2">
-
             {/* Search */}
 
             <button
@@ -988,7 +985,6 @@ const MainLayout = () => {
                   aria-label="Notifications panel"
                   className="absolute right-0 top-full z-50 mt-3 w-[min(25rem,calc(100vw-1.5rem))] overflow-hidden rounded-2xl border border-white/[0.08] bg-[#0e0e11] shadow-2xl shadow-black/60 sm:rounded-3xl"
                 >
-
                   <div className="flex items-center justify-between gap-2 border-b border-white/[0.06] px-4 py-4 sm:px-5">
                     <div className="min-w-0">
                       <h3 className="font-semibold">
