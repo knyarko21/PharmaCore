@@ -210,12 +210,6 @@ const NAV_ITEMS = [
     roles: ADMIN_AND_SUPERADMIN,
   },
   {
-    label: "User Approvals",
-    path: "/user-approvals",
-    icon: CheckCheck,
-    roles: ADMIN_AND_SUPERADMIN,
-  },
-  {
     label: "Audit Logs",
     path: "/audit-logs",
     icon: ClipboardList,
