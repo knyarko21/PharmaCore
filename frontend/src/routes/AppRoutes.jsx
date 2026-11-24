@@ -1,4 +1,5 @@
 
+
 import { lazy, Suspense, useEffect } from "react";
 
 import {
@@ -55,7 +56,6 @@ const PHARMACY_ROLES = [
   ROLES.ADMIN,
   ROLES.PHARMACIST,
 ];
-
 
 const PURCHASE_ROLES = [
   ROLES.ADMIN,
@@ -173,8 +173,6 @@ const Suppliers = lazy(() => import("../pages/Suppliers"));
 const Sales = lazy(() => import("../pages/Sales"));
 
 const Customers = lazy(() => import("../pages/Customers"));
-
-const Doctors = lazy(() => import("../pages/Doctors"));
 
 const Prescriptions = lazy(
   () => import("../pages/Prescriptions")
@@ -451,17 +449,6 @@ const AppRoutes = () => {
                 element={
                   <ProtectedPage allowedRoles={SALES_ROLES}>
                     <Customers />
-                  </ProtectedPage>
-                }
-              />
-
-              {/* DOCTORS */}
-
-              <Route
-                path="/doctors"
-                element={
-                  <ProtectedPage allowedRoles={PHARMACY_ROLES}>
-                    <Doctors />
                   </ProtectedPage>
                 }
               />

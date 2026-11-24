@@ -13,7 +13,6 @@ const Batch = require("./Batch");
 const Purchase = require("./Purchase");
 const PurchaseItem = require("./PurchaseItem");
 const Customer = require("./Customer");
-const Doctor = require("./Doctor");
 const Prescription = require("./Prescription");
 const PrescriptionItem = require("./PrescriptionItem");
 const Sale = require("./Sale");
@@ -168,24 +167,6 @@ Customer.hasMany(Prescription, {
 Prescription.belongsTo(Customer, {
   foreignKey: "customerId",
   as: "customer",
-});
-
-// =========================================
-// DOCTOR AND PRESCRIPTION
-// =========================================
-
-Doctor.hasMany(Prescription, {
-  foreignKey: "doctorId",
-  as: "prescriptions",
-  onDelete: "SET NULL",
-  onUpdate: "CASCADE",
-});
-
-Prescription.belongsTo(Doctor, {
-  foreignKey: "doctorId",
-  as: "doctor",
-  onDelete: "SET NULL",
-  onUpdate: "CASCADE",
 });
 
 // =========================================
@@ -365,7 +346,6 @@ module.exports = {
 
   // Customers and prescriptions
   Customer,
-  Doctor,
   Prescription,
   PrescriptionItem,
 

@@ -29,13 +29,24 @@ const prescriptionDateSchema = z
   );
 
 // ======================================================
-// Registered doctor ID validation
+// Prescriber validation
 // ======================================================
 
-const doctorIdSchema = z.coerce
-  .number()
-  .int("Doctor ID must be a whole number.")
-  .positive("Please select a registered doctor.");
+const doctorNameSchema = z
+  .string()
+  .trim()
+  .min(1, "Prescriber name is required.")
+  .max(150, "Prescriber name cannot exceed 150 characters.");
+
+const doctorLicenseNumberSchema = z
+  .string()
+  .trim()
+  .max(
+    100,
+    "Prescriber licence number cannot exceed 100 characters."
+  )
+  .optional()
+  .or(z.literal(""));
 
 // ======================================================
 // Prescription item validation
@@ -85,7 +96,6 @@ const prescriptionItemSchema = z.object({
 const createPrescriptionSchema = z
   .object({
     // The backend generates the prescription number.
-    // This field is retained for compatibility with the UI.
     prescriptionNumber: z
       .string()
       .trim()
@@ -102,9 +112,10 @@ const createPrescriptionSchema = z
 
     prescriptionDate: prescriptionDateSchema,
 
-    // The frontend must send the ID of a registered doctor.
-    // The backend resolves the actual name and licence number.
-    doctorId: doctorIdSchema,
+    // Prescriber details are entered manually.
+    doctorName: doctorNameSchema,
+
+    doctorLicenseNumber: doctorLicenseNumberSchema,
 
     diagnosis: z
       .string()
@@ -158,9 +169,9 @@ const updatePrescriptionSchema = z
   .object({
     prescriptionDate: prescriptionDateSchema.optional(),
 
-    // If a prescription's doctor needs to be changed,
-    // a registered doctor ID must be supplied.
-    doctorId: doctorIdSchema.optional(),
+    doctorName: doctorNameSchema.optional(),
+
+    doctorLicenseNumber: doctorLicenseNumberSchema,
 
     diagnosis: z
       .string()
@@ -176,9 +187,7 @@ const updatePrescriptionSchema = z
       .optional()
       .or(z.literal("")),
 
-    // Never allow clients to edit generated or verified fields.
-    doctorName: z.never().optional(),
-    doctorLicenseNumber: z.never().optional(),
+    // Prescription numbers remain backend-generated.
     prescriptionNumber: z.never().optional(),
   })
   .strict();
@@ -189,7 +198,8 @@ const updatePrescriptionSchema = z
 
 module.exports = {
   prescriptionDateSchema,
-  doctorIdSchema,
+  doctorNameSchema,
+  doctorLicenseNumberSchema,
   prescriptionItemSchema,
   createPrescriptionSchema,
   updatePrescriptionSchema,

@@ -40,7 +40,6 @@ const supplierRoutes = require("./routes/supplierRoutes");
 const purchaseRoutes = require("./routes/purchaseRoutes");
 
 const customerRoutes = require("./routes/customerRoutes");
-const doctorRoutes = require("./routes/doctorRoutes");
 const prescriptionRoutes = require("./routes/prescriptionRoutes");
 
 const saleRoutes = require("./routes/saleRoutes");
@@ -93,7 +92,6 @@ app.use(
 
       return callback(new Error("Origin not allowed by CORS."));
     },
-
     credentials: true,
   })
 );
@@ -191,9 +189,8 @@ app.use("/api/batches", batchRoutes);
 app.use("/api/suppliers", supplierRoutes);
 app.use("/api/purchases", purchaseRoutes);
 
-// Customers, doctors and prescriptions.
+// Customers and prescriptions.
 app.use("/api/customers", customerRoutes);
-app.use("/api/doctors", doctorRoutes);
 app.use("/api/prescriptions", prescriptionRoutes);
 
 // Sales.

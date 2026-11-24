@@ -1,5 +1,4 @@
 
-
 import {
   AlertCircle,
   CalendarDays,
@@ -86,44 +85,6 @@ const getCustomerName = (customer) => {
   );
 };
 
-const getDoctorName = (doctor) => {
-  if (!doctor) return "Unknown doctor";
-
-  const firstName = doctor.firstName || "";
-  const lastName = doctor.lastName || "";
-  const fullName = `${firstName} ${lastName}`.trim();
-
-  return (
-    doctor.fullName ||
-    fullName ||
-    doctor.name ||
-    doctor.doctorName ||
-    "Unknown doctor"
-  );
-};
-
-const getDoctorLicense = (doctor) =>
-  doctor?.licenseNumber ||
-  doctor?.registrationNumber ||
-  doctor?.licenseNo ||
-  "";
-
-const getDoctorSpecialization = (doctor) =>
-  doctor?.specialization ||
-  doctor?.specialty ||
-  doctor?.department ||
-  "Specialization not provided";
-
-const getDoctorFacility = (doctor) =>
-  doctor?.hospitalName ||
-  doctor?.clinicName ||
-  doctor?.hospitalClinic ||
-  doctor?.facilityName ||
-  doctor?.institutionName ||
-  doctor?.hospital ||
-  doctor?.clinic ||
-  "Facility not provided";
-
 const getCreatorName = (creator) => {
   if (!creator) return "Unknown";
 
@@ -206,7 +167,8 @@ const getStatusIcon = (status) => {
 const createEmptyForm = () => ({
   prescriptionNumber: "",
   prescriptionDate: new Date().toISOString().split("T")[0],
-  doctorId: "",
+  doctorName: "",
+  doctorLicenseNumber: "",
   diagnosis: "",
   notes: "",
   customerId: ""
@@ -261,19 +223,17 @@ const IconBox = ({
 // =====================================================
 
 const Prescriptions = () => {
-  const { user, hasRolePermission } = useAuth();
+  const { hasRolePermission } = useAuth();
 
   const isMounted = useRef(false);
 
   const [prescriptions, setPrescriptions] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [medicines, setMedicines] = useState([]);
-  const [doctors, setDoctors] = useState([]);
 
   const [loading, setLoading] = useState(true);
   const [loadingCustomers, setLoadingCustomers] = useState(true);
   const [loadingMedicines, setLoadingMedicines] = useState(true);
-  const [loadingDoctors, setLoadingDoctors] = useState(true);
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -296,28 +256,10 @@ const Prescriptions = () => {
 
   const [formData, setFormData] = useState(createEmptyForm);
   const [formItems, setFormItems] = useState([createEmptyItem()]);
-  const [doctorSearchTerm, setDoctorSearchTerm] = useState("");
-  const [showDoctorOptions, setShowDoctorOptions] = useState(false);
-
-  const selectedDoctor = doctors.find(
-    (doctor) => String(doctor.id) === String(formData.doctorId)
-  );
-
-  const filteredDoctors = doctors.filter((doctor) => {
-    const term = doctorSearchTerm.trim().toLowerCase();
-    if (!term) return true;
-
-    return [
-      getDoctorName(doctor),
-      getDoctorLicense(doctor),
-      getDoctorSpecialization(doctor),
-      getDoctorFacility(doctor)
-    ].some((value) => String(value).toLowerCase().includes(term));
-  });
 
   const canManagePrescriptions = hasRolePermission([
     "admin",
-    "pharmacist",
+    "pharmacist"
   ]);
 
   // =====================================================
@@ -456,55 +398,6 @@ const Prescriptions = () => {
     }
   }, []);
 
-  const fetchDoctors = useCallback(async () => {
-    try {
-      if (isMounted.current) {
-        setLoadingDoctors(true);
-      }
-
-      const response = await api.get("/doctors");
-      const data = response.data;
-
-      let doctorList = [];
-
-      if (Array.isArray(data)) {
-        doctorList = data;
-      } else if (Array.isArray(data?.doctors)) {
-        doctorList = data.doctors;
-      } else if (Array.isArray(data?.data)) {
-        doctorList = data.data;
-      } else if (Array.isArray(data?.data?.doctors)) {
-        doctorList = data.data.doctors;
-      } else if (Array.isArray(data?.data?.rows)) {
-        doctorList = data.data.rows;
-      }
-
-      if (!isMounted.current) return;
-
-      setDoctors(
-        doctorList.filter(
-          (doctor) => doctor.isActive !== false && doctor.active !== false
-        )
-      );
-    } catch (err) {
-      console.error("Failed to load doctors:", err);
-
-      if (!isMounted.current) return;
-
-      setDoctors([]);
-      setError(
-        getErrorMessage(
-          err,
-          "Unable to load registered doctors. Please check the doctors API."
-        )
-      );
-    } finally {
-      if (isMounted.current) {
-        setLoadingDoctors(false);
-      }
-    }
-  }, []);
-
   useEffect(() => {
     isMounted.current = true;
 
@@ -512,8 +405,7 @@ const Prescriptions = () => {
       void Promise.all([
         fetchPrescriptions(),
         fetchCustomers(),
-        fetchMedicines(),
-        fetchDoctors()
+        fetchMedicines()
       ]);
     });
 
@@ -524,8 +416,7 @@ const Prescriptions = () => {
   }, [
     fetchPrescriptions,
     fetchCustomers,
-    fetchMedicines,
-    fetchDoctors
+    fetchMedicines
   ]);
 
   // =====================================================
@@ -542,8 +433,7 @@ const Prescriptions = () => {
       await Promise.all([
         fetchPrescriptions(false),
         fetchCustomers(),
-        fetchMedicines(),
-        fetchDoctors()
+        fetchMedicines()
       ]);
     } finally {
       if (isMounted.current) {
@@ -603,10 +493,12 @@ const Prescriptions = () => {
         prescription.prescriptionNumber || ""
       ).toLowerCase();
 
-      const doctor = (
-        prescription.doctor
-          ? getDoctorName(prescription.doctor)
-          : prescription.doctorName || ""
+      const prescriber = (
+        prescription.doctorName || ""
+      ).toLowerCase();
+
+      const prescriberLicense = (
+        prescription.doctorLicenseNumber || ""
       ).toLowerCase();
 
       const diagnosis = (
@@ -617,7 +509,8 @@ const Prescriptions = () => {
         !term ||
         number.includes(term) ||
         customerName.includes(term) ||
-        doctor.includes(term) ||
+        prescriber.includes(term) ||
+        prescriberLicense.includes(term) ||
         diagnosis.includes(term);
 
       const matchesStatus =
@@ -652,8 +545,6 @@ const Prescriptions = () => {
   const resetForm = () => {
     setFormData(createEmptyForm());
     setFormItems([createEmptyItem()]);
-    setDoctorSearchTerm("");
-    setShowDoctorOptions(false);
   };
 
   const closeCreateModal = () => {
@@ -732,8 +623,8 @@ const Prescriptions = () => {
       return;
     }
 
-    if (!formData.doctorId) {
-      setError("Please select a registered doctor.");
+    if (!formData.doctorName.trim()) {
+      setError("Please enter the prescriber's name.");
       return;
     }
 
@@ -747,13 +638,14 @@ const Prescriptions = () => {
         !item.medicineId ||
         !item.dosage.trim() ||
         !item.frequency.trim() ||
+        !item.duration.trim() ||
         !Number.isInteger(Number(item.quantity)) ||
         Number(item.quantity) < 1
     );
 
     if (invalidItem) {
       setError(
-        "Complete all required medicine fields and enter a valid quantity."
+        "Complete all required medicine fields, including duration, and enter a valid quantity."
       );
       return;
     }
@@ -781,7 +673,11 @@ const Prescriptions = () => {
         prescriptionDate:
           formData.prescriptionDate,
 
-        doctorId: Number(formData.doctorId),
+        doctorName:
+          formData.doctorName.trim(),
+
+        doctorLicenseNumber:
+          formData.doctorLicenseNumber.trim() || undefined,
 
         diagnosis:
           formData.diagnosis.trim() ||
@@ -798,7 +694,7 @@ const Prescriptions = () => {
           medicineId: Number(item.medicineId),
           dosage: item.dosage.trim(),
           frequency: item.frequency.trim(),
-          duration: item.duration.trim() || undefined,
+          duration: item.duration.trim(),
           quantity: Number(item.quantity),
           instructions:
             item.instructions.trim() ||
@@ -900,7 +796,7 @@ const Prescriptions = () => {
       prescription.status === "active"
     );
 
-     const openCancelModal = (prescription) => {
+  const openCancelModal = (prescription) => {
     setPrescriptionToCancel(prescription);
     setShowCancelModal(true);
   };
@@ -1102,7 +998,7 @@ const Prescriptions = () => {
           </div>
         )}
 
-{/* =====================================================
+        {/* =====================================================
             STATISTICS
         ====================================================== */}
 
@@ -1154,7 +1050,7 @@ const Prescriptions = () => {
             value={stats.cancelled}
             icon={XCircle}
             description="Cancelled prescriptions"
-            accent="rose"
+            accent="red"
             active={statusFilter === "cancelled"}
             onClick={() => handleStatusCardClick("cancelled")}
           />
@@ -1178,7 +1074,7 @@ const Prescriptions = () => {
                 onChange={(event) =>
                   setSearchTerm(event.target.value)
                 }
-                placeholder="Search prescription number, customer, doctor or diagnosis..."
+                placeholder="Search prescription number, customer, prescriber or diagnosis..."
                 aria-label="Search prescriptions"
                 className="w-full min-w-0 rounded-xl border border-zinc-800 bg-[#0b0b0d] py-2.5 pl-10 pr-4 text-sm text-white outline-none transition-colors placeholder:text-zinc-600 focus:border-violet-500 focus:ring-2 focus:ring-violet-500/10"
               />
@@ -1287,7 +1183,7 @@ const Prescriptions = () => {
                       </th>
 
                       <th className="px-5 py-4 font-medium">
-                        Doctor
+                        Prescriber
                       </th>
 
                       <th className="px-5 py-4 font-medium">
@@ -1355,12 +1251,12 @@ const Prescriptions = () => {
 
                           <td className="px-5 py-4">
                             <div className="font-medium text-zinc-300">
-                              {getDoctorName(prescription.doctor) !== "Unknown doctor" ? getDoctorName(prescription.doctor) : prescription.doctorName || "—"}
+                              {prescription.doctorName || "—"}
                             </div>
 
                             {prescription.doctorLicenseNumber && (
                               <div className="mt-1 text-xs text-zinc-500">
-                                License:{" "}
+                                Licence/Registration:{" "}
                                 {prescription.doctorLicenseNumber}
                               </div>
                             )}
@@ -1496,12 +1392,19 @@ const Prescriptions = () => {
 
                           <div className="min-w-0">
                             <div className="break-words text-sm text-zinc-300">
-                              {getDoctorName(prescription.doctor) !== "Unknown doctor" ? getDoctorName(prescription.doctor) : prescription.doctorName || "—"}
+                              {prescription.doctorName || "—"}
                             </div>
 
                             <div className="text-xs text-zinc-500">
-                              Prescribing doctor
+                              Prescriber
                             </div>
+
+                            {prescription.doctorLicenseNumber && (
+                              <div className="mt-1 break-words text-xs text-zinc-500">
+                                Licence/Registration:{" "}
+                                {prescription.doctorLicenseNumber}
+                              </div>
+                            )}
                           </div>
                         </div>
 
@@ -1692,129 +1595,34 @@ const Prescriptions = () => {
                           )}
                       </FormField>
 
-                      <FormField label="Registered Doctor" required>
-                        <div className="relative">
-                          <div className="relative">
-                            <Search
-                              size={16}
-                              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500"
-                            />
-                            <input
-                              type="text"
-                              value={doctorSearchTerm}
-                              onChange={(event) => {
-                                setDoctorSearchTerm(event.target.value);
-                                setShowDoctorOptions(true);
-                                setFormData((previous) => ({
-                                  ...previous,
-                                  doctorId: ""
-                                }));
-                              }}
-                              onFocus={() => setShowDoctorOptions(true)}
-                              placeholder={
-                                loadingDoctors
-                                  ? "Loading registered doctors..."
-                                  : "Search by name, license, specialty or facility"
-                              }
-                              className={`${inputClass} pl-10`}
-                              autoComplete="off"
-                              disabled={loadingDoctors || submitting}
-                              aria-expanded={showDoctorOptions}
-                              aria-label="Search registered doctors"
-                            />
-                          </div>
+                      <FormField
+                        label="Prescriber Name"
+                        required
+                      >
+                        <input
+                          type="text"
+                          name="doctorName"
+                          value={formData.doctorName}
+                          onChange={handleFormChange}
+                          placeholder="Enter the prescriber's full name"
+                          className={inputClass}
+                          maxLength={150}
+                          autoComplete="off"
+                          required
+                        />
+                      </FormField>
 
-                          {showDoctorOptions && !loadingDoctors && (
-                            <div className="absolute z-30 mt-2 max-h-64 w-full overflow-y-auto rounded-xl border border-zinc-700 bg-[#111114] p-1 shadow-2xl shadow-black/40">
-                              {filteredDoctors.length > 0 ? (
-                                filteredDoctors.map((doctor) => (
-                                  <button
-                                    key={doctor.id}
-                                    type="button"
-                                    onClick={() => {
-                                      setFormData((previous) => ({
-                                        ...previous,
-                                        doctorId: String(doctor.id)
-                                      }));
-                                      setDoctorSearchTerm("");
-                                      setShowDoctorOptions(false);
-                                    }}
-                                    className="flex w-full items-start gap-3 rounded-lg px-3 py-3 text-left transition hover:bg-violet-950/40 focus:bg-violet-950/40 focus:outline-none"
-                                  >
-                                    <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-violet-800/50 bg-violet-950/40 text-violet-300">
-                                      <Stethoscope size={17} />
-                                    </span>
-                                    <span className="min-w-0 flex-1">
-                                      <span className="block break-words text-sm font-medium text-white">
-                                        {getDoctorName(doctor)}
-                                      </span>
-                                      <span className="mt-1 block break-words text-xs text-zinc-400">
-                                        {getDoctorSpecialization(doctor)}
-                                      </span>
-                                      <span className="mt-1 block break-words text-xs text-zinc-500">
-                                        {getDoctorFacility(doctor)}
-                                        {getDoctorLicense(doctor)
-                                          ? ` • License: ${getDoctorLicense(doctor)}`
-                                          : ""}
-                                      </span>
-                                    </span>
-                                  </button>
-                                ))
-                              ) : (
-                                <p className="px-3 py-4 text-sm text-zinc-400">
-                                  No registered doctors match your search.
-                                </p>
-                              )}
-                            </div>
-                          )}
-                        </div>
-
-                        {selectedDoctor && (
-                          <div className="mt-3 rounded-xl border border-violet-800/40 bg-violet-950/20 p-3">
-                            <div className="flex items-start gap-3">
-                              <IconBox className="border-violet-800/50 bg-violet-950/40 text-violet-300" size="sm">
-                                <Stethoscope size={17} />
-                              </IconBox>
-                              <div className="min-w-0 flex-1">
-                                <p className="break-words text-sm font-semibold text-white">
-                                  {getDoctorName(selectedDoctor)}
-                                </p>
-                                <p className="mt-1 text-xs text-zinc-300">
-                                  {getDoctorSpecialization(selectedDoctor)}
-                                </p>
-                                <p className="mt-1 break-words text-xs text-zinc-400">
-                                  {getDoctorFacility(selectedDoctor)}
-                                </p>
-                                {getDoctorLicense(selectedDoctor) && (
-                                  <p className="mt-1 text-xs text-zinc-500">
-                                    License: {getDoctorLicense(selectedDoctor)}
-                                  </p>
-                                )}
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setFormData((previous) => ({
-                                    ...previous,
-                                    doctorId: ""
-                                  }));
-                                  setDoctorSearchTerm("");
-                                  setShowDoctorOptions(true);
-                                    }}
-                                className="rounded-lg p-1 text-zinc-500 transition hover:bg-white/5 hover:text-white"
-                                aria-label="Change selected doctor"
-                              >
-                                <X size={16} />
-                              </button>
-                            </div>
-                          </div>
-                        )}
-
-                        {!loadingDoctors && doctors.length === 0 && (
-                          <p className="mt-2 text-xs leading-5 text-amber-400">
-                            No registered doctors are available. Add or activate a doctor on the Doctors page, then refresh this form.
-                          </p>
-                        )}
+                      <FormField label="Prescriber Licence/Registration Number">
+                        <input
+                          type="text"
+                          name="doctorLicenseNumber"
+                          value={formData.doctorLicenseNumber}
+                          onChange={handleFormChange}
+                          placeholder="Enter licence or registration number (optional)"
+                          className={inputClass}
+                          maxLength={100}
+                          autoComplete="off"
+                        />
                       </FormField>
 
                       <FormField label="Diagnosis">
@@ -1978,15 +1786,20 @@ const Prescriptions = () => {
                               />
                             </FormField>
 
-                            <FormField label="Duration">
+                            <FormField label="Duration" required>
                               <input
                                 type="text"
                                 value={item.duration}
                                 onChange={(event) =>
-                                  handleItemChange(index, "duration", event.target.value)
+                                  handleItemChange(
+                                    index,
+                                    "duration",
+                                    event.target.value
+                                  )
                                 }
                                 placeholder="e.g. 7 days"
                                 className={inputClass}
+                                required
                               />
                             </FormField>
 
@@ -2211,23 +2024,13 @@ const Prescriptions = () => {
                       title="Prescriber"
                     >
                       <div className="break-words font-semibold text-white">
-                        {selectedPrescription.doctor
-                          ? getDoctorName(selectedPrescription.doctor)
-                          : selectedPrescription.doctorName || "—"}
+                        {selectedPrescription.doctorName || "—"}
                       </div>
-                      {(getDoctorLicense(selectedPrescription.doctor) || selectedPrescription.doctorLicenseNumber) && (
+
+                      {selectedPrescription.doctorLicenseNumber && (
                         <div className="mt-2 text-xs text-zinc-400">
-                          License: {getDoctorLicense(selectedPrescription.doctor) || selectedPrescription.doctorLicenseNumber}
-                        </div>
-                      )}
-                      {(selectedPrescription.doctor?.specialization || selectedPrescription.doctor?.specialty) && (
-                        <div className="mt-1 text-sm text-zinc-400">
-                          {getDoctorSpecialization(selectedPrescription.doctor)}
-                        </div>
-                      )}
-                      {selectedPrescription.doctor && getDoctorFacility(selectedPrescription.doctor) !== "Facility not provided" && (
-                        <div className="mt-1 break-words text-sm text-zinc-500">
-                          {getDoctorFacility(selectedPrescription.doctor)}
+                          Licence/Registration:{" "}
+                          {selectedPrescription.doctorLicenseNumber}
                         </div>
                       )}
                     </InfoPanel>
@@ -2390,6 +2193,7 @@ const Prescriptions = () => {
                           Notes
                         </h3>
                       </div>
+
                       <div className="rounded-xl border border-zinc-800 bg-[#0b0b0d] p-4">
                         <p className="whitespace-pre-wrap break-words text-sm leading-6 text-zinc-300">
                           {selectedPrescription.notes}
@@ -2403,118 +2207,129 @@ const Prescriptions = () => {
 
             {/* Details footer */}
 
-              <div className="flex shrink-0 flex-col-reverse gap-3 border-t border-zinc-800 bg-[#0e0e11] px-4 py-4 sm:flex-row sm:justify-between sm:px-6">
-                <div>
-                  {canManagePrescriptions &&
-                    canCancelPrescription(selectedPrescription) && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          openCancelModal(selectedPrescription);
-                          closeDetailsModal();
-                        }}
-                        className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-800/70 px-4 py-2.5 text-sm font-medium text-red-300 transition hover:bg-red-950/40"
-                      >
-                        <Trash2 size={16} />
-                        Cancel Prescription
-                      </button>
-                    )}
-                </div>
-
-                <button
-                  type="button"
-                  onClick={closeDetailsModal}
-                  className="rounded-xl border border-zinc-800 bg-[#0b0b0d] px-4 py-2.5 text-sm font-medium text-zinc-300 transition hover:border-zinc-700 hover:text-white"
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-          </ModalOverlay>
-        )}
-
-        {/* =====================================================
-            CANCEL PRESCRIPTION MODAL
-        ====================================================== */}
-
-        {showCancelModal && prescriptionToCancel && (
-          <ModalOverlay
-            onClose={closeCancelModal}
-            closeDisabled={submitting}
-            labelledBy="cancel-prescription-title"
-          >
-            <div className="w-full max-w-md rounded-2xl border border-zinc-800 bg-[#0e0e11] p-5 shadow-2xl shadow-black/50 sm:p-6">
-              <div className="flex items-start gap-3">
-                <IconBox className="border-red-800/60 bg-red-950/40 text-red-300">
-                  <AlertCircle size={20} />
-                </IconBox>
-                <div className="min-w-0 flex-1">
-                  <h2
-                    id="cancel-prescription-title"
-                    className="text-lg font-semibold text-white"
-                  >
-                    Cancel prescription?
-                  </h2>
-                  <p className="mt-2 text-sm leading-6 text-zinc-400">
-                    You are about to cancel prescription{" "}
-                    <span className="font-semibold text-zinc-200">
-                      {prescriptionToCancel.prescriptionNumber}
-                    </span>
-                    . This action should only be used when the prescription
-                    must no longer be dispensed.
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-5 rounded-xl border border-zinc-800 bg-[#0b0b0d] p-3">
-                <div className="text-xs uppercase tracking-wider text-zinc-500">
-                  Customer
-                </div>
-                <div className="mt-1 break-words text-sm font-medium text-zinc-200">
-                  {getCustomerName(prescriptionToCancel.customer)}
-                </div>
-                <div className="mt-3 text-xs uppercase tracking-wider text-zinc-500">
-                  Doctor
-                </div>
-                <div className="mt-1 break-words text-sm font-medium text-zinc-200">
-                  {prescriptionToCancel.doctor
-                    ? getDoctorName(prescriptionToCancel.doctor)
-                    : prescriptionToCancel.doctorName || "—"}
-                </div>
-              </div>
-
-              <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-                <button
-                  type="button"
-                  onClick={closeCancelModal}
-                  disabled={submitting}
-                  className="rounded-xl border border-zinc-800 bg-[#0b0b0d] px-4 py-2.5 text-sm font-medium text-zinc-300 transition hover:border-zinc-700 hover:text-white disabled:opacity-50"
-                >
-                  Keep Prescription
-                </button>
-                <button
-                  type="button"
-                  onClick={handleCancelPrescription}
-                  disabled={submitting}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-red-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {submitting ? (
-                    <>
-                      <Loader2 size={16} className="animate-spin" />
-                      Cancelling...
-                    </>
-                  ) : (
-                    <>
+            <div className="flex shrink-0 flex-col-reverse gap-3 border-t border-zinc-800 bg-[#0e0e11] px-4 py-4 sm:flex-row sm:justify-between sm:px-6">
+              <div>
+                {canManagePrescriptions &&
+                  canCancelPrescription(selectedPrescription) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        openCancelModal(selectedPrescription);
+                        closeDetailsModal();
+                      }}
+                      className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-800/70 px-4 py-2.5 text-sm font-medium text-red-300 transition hover:bg-red-950/40"
+                    >
                       <Trash2 size={16} />
-                      Confirm Cancellation
-                    </>
+                      Cancel Prescription
+                    </button>
                   )}
-                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={closeDetailsModal}
+                className="rounded-xl border border-zinc-800 bg-[#0b0b0d] px-4 py-2.5 text-sm font-medium text-zinc-300 transition hover:border-zinc-700 hover:text-white"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </ModalOverlay>
+      )}
+
+      {/* =====================================================
+          CANCEL PRESCRIPTION MODAL
+      ====================================================== */}
+
+      {showCancelModal && prescriptionToCancel && (
+        <ModalOverlay
+          onClose={closeCancelModal}
+          closeDisabled={submitting}
+          labelledBy="cancel-prescription-title"
+        >
+          <div className="w-full max-w-md rounded-2xl border border-zinc-800 bg-[#0e0e11] p-5 shadow-2xl shadow-black/50 sm:p-6">
+            <div className="flex items-start gap-3">
+              <IconBox className="border-red-800/60 bg-red-950/40 text-red-300">
+                <AlertCircle size={20} />
+              </IconBox>
+
+              <div className="min-w-0 flex-1">
+                <h2
+                  id="cancel-prescription-title"
+                  className="text-lg font-semibold text-white"
+                >
+                  Cancel prescription?
+                </h2>
+
+                <p className="mt-2 text-sm leading-6 text-zinc-400">
+                  You are about to cancel prescription{" "}
+                  <span className="font-semibold text-zinc-200">
+                    {prescriptionToCancel.prescriptionNumber}
+                  </span>
+                  . This action should only be used when the prescription
+                  must no longer be dispensed.
+                </p>
               </div>
             </div>
-          </ModalOverlay>
-        )}
-      </div>
+
+            <div className="mt-5 rounded-xl border border-zinc-800 bg-[#0b0b0d] p-3">
+              <div className="text-xs uppercase tracking-wider text-zinc-500">
+                Customer
+              </div>
+
+              <div className="mt-1 break-words text-sm font-medium text-zinc-200">
+                {getCustomerName(prescriptionToCancel.customer)}
+              </div>
+
+              <div className="mt-3 text-xs uppercase tracking-wider text-zinc-500">
+                Prescriber
+              </div>
+
+              <div className="mt-1 break-words text-sm font-medium text-zinc-200">
+                {prescriptionToCancel.doctorName || "—"}
+              </div>
+
+              {prescriptionToCancel.doctorLicenseNumber && (
+                <div className="mt-1 break-words text-xs text-zinc-500">
+                  Licence/Registration:{" "}
+                  {prescriptionToCancel.doctorLicenseNumber}
+                </div>
+              )}
+            </div>
+
+            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={closeCancelModal}
+                disabled={submitting}
+                className="rounded-xl border border-zinc-800 bg-[#0b0b0d] px-4 py-2.5 text-sm font-medium text-zinc-300 transition hover:border-zinc-700 hover:text-white disabled:opacity-50"
+              >
+                Keep Prescription
+              </button>
+
+              <button
+                type="button"
+                onClick={handleCancelPrescription}
+                disabled={submitting}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-red-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {submitting ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" />
+                    Cancelling...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 size={16} />
+                    Confirm Cancellation
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </ModalOverlay>
+      )}
+    </div>
   );
 };
 
@@ -2528,6 +2343,7 @@ const FormField = ({ label, required = false, children }) => (
       {label}
       {required && <span className="ml-1 text-violet-400">*</span>}
     </label>
+
     {children}
   </div>
 );
@@ -2554,15 +2370,24 @@ const StatCard = ({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm text-zinc-400">{label}</p>
+
           <p className="mt-2 text-2xl font-bold tracking-tight text-white">
             {value}
           </p>
         </div>
-        <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border ${accents[accent] || accents.violet}`}>
+
+        <span
+          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border ${
+            accents[accent] || accents.violet
+          }`}
+        >
           {Icon && <Icon size={19} />}
         </span>
       </div>
-      <p className="mt-3 text-xs text-zinc-500">{description}</p>
+
+      <p className="mt-3 text-xs text-zinc-500">
+        {description}
+      </p>
     </>
   );
 
@@ -2571,7 +2396,11 @@ const StatCard = ({
       <button
         type="button"
         onClick={onClick}
-        className={`w-full rounded-2xl border p-4 text-left transition ${active ? "border-violet-600/70 bg-violet-950/20" : "border-zinc-800 bg-[#0b0b0d] hover:border-zinc-700"}`}
+        className={`w-full rounded-2xl border p-4 text-left transition ${
+          active
+            ? "border-violet-600/70 bg-violet-950/20"
+            : "border-zinc-800 bg-[#0b0b0d] hover:border-zinc-700"
+        }`}
       >
         {content}
       </button>
@@ -2586,7 +2415,11 @@ const StatCard = ({
 };
 
 const StatusBadge = ({ status }) => (
-  <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium ${getStatusClasses(status)}`}>
+  <span
+    className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium ${getStatusClasses(
+      status
+    )}`}
+  >
     {getStatusLabel(status)}
   </span>
 );
@@ -2594,10 +2427,21 @@ const StatusBadge = ({ status }) => (
 const InfoPanel = ({ icon: Icon, title, children }) => (
   <section className="min-w-0 rounded-2xl border border-zinc-800 bg-[#0b0b0d] p-4">
     <div className="mb-3 flex items-center gap-2">
-      {Icon && <Icon size={16} className="text-violet-400" />}
-      <h3 className="text-sm font-semibold text-zinc-200">{title}</h3>
+      {Icon && (
+        <Icon
+          size={16}
+          className="text-violet-400"
+        />
+      )}
+
+      <h3 className="text-sm font-semibold text-zinc-200">
+        {title}
+      </h3>
     </div>
-    <div className="min-w-0">{children}</div>
+
+    <div className="min-w-0">
+      {children}
+    </div>
   </section>
 );
 
@@ -2606,25 +2450,39 @@ const DetailValue = ({ label, value }) => (
     <div className="text-xs font-medium uppercase tracking-wider text-zinc-500">
       {label}
     </div>
+
     <div className="mt-1 break-words text-sm leading-6 text-zinc-200">
       {value ?? "—"}
     </div>
   </div>
 );
 
-const EmptyState = ({ hasFilters, canCreate, onCreate, onClear }) => (
+const EmptyState = ({
+  hasFilters,
+  canCreate,
+  onCreate,
+  onClear
+}) => (
   <div className="flex min-h-[280px] flex-col items-center justify-center px-5 py-12 text-center">
-    <IconBox className="border-zinc-800 bg-[#111113] text-zinc-400" size="lg">
+    <IconBox
+      className="border-zinc-800 bg-[#111113] text-zinc-400"
+      size="lg"
+    >
       <ClipboardList size={22} />
     </IconBox>
+
     <h3 className="mt-4 text-base font-semibold text-white">
-      {hasFilters ? "No matching prescriptions" : "No prescriptions yet"}
+      {hasFilters
+        ? "No matching prescriptions"
+        : "No prescriptions yet"}
     </h3>
+
     <p className="mt-2 max-w-md text-sm leading-6 text-zinc-400">
       {hasFilters
         ? "Try changing your search or status filter to find a prescription."
         : "Prescriptions created for registered customers will appear here."}
     </p>
+
     <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
       {hasFilters ? (
         <button

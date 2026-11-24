@@ -19,7 +19,6 @@ import {
   Search,
   Settings,
   ShoppingCart,
-  Stethoscope,
   Truck,
   Users,
   X,
@@ -178,12 +177,6 @@ const NAV_ITEMS = [
     path: "/customers",
     icon: Users,
     roles: SALES_ROLES,
-  },
-  {
-    label: "Doctors",
-    path: "/doctors",
-    icon: Stethoscope,
-    roles: PHARMACY_ROLES,
   },
   {
     label: "Prescriptions",
@@ -383,9 +376,6 @@ const MainLayout = () => {
 
   /*
    * Keep read notification status separate for each user.
-   *
-   * No effect is needed to reset state when the user changes.
-   * If the storage key changes, read that user's saved IDs directly.
    */
 
   const userIdentifier = user?.id ?? user?.email ?? "guest";

@@ -8,7 +8,6 @@ const {
   Prescription,
   PrescriptionItem,
   Customer,
-  Doctor,
   User,
   Medicine,
 } = require("../models");
@@ -27,11 +26,6 @@ const prescriptionIncludes = [
   {
     model: Customer,
     as: "customer",
-  },
-  {
-    model: Doctor,
-    as: "doctor",
-    required: false,
   },
   {
     model: User,
@@ -109,61 +103,14 @@ const generatePrescriptionNumber = async (transaction) => {
 };
 
 // ======================================================
-// Validate a registered doctor
-// ======================================================
-
-const getRegisteredDoctor = async (doctorId, transaction) => {
-  const parsedDoctorId = Number(doctorId);
-
-  if (
-    !Number.isInteger(parsedDoctorId) ||
-    parsedDoctorId <= 0
-  ) {
-    throw createError(
-      "Please select a registered doctor.",
-      400
-    );
-  }
-
-  const doctor = await Doctor.findOne({
-    where: {
-      id: parsedDoctorId,
-      isActive: true,
-    },
-    transaction,
-    lock: transaction.LOCK.UPDATE,
-  });
-
-  if (!doctor) {
-    throw createError(
-      "The selected doctor does not exist or is inactive. Please select an active registered doctor.",
-      404
-    );
-  }
-
-  if (
-    !doctor.fullName ||
-    !String(doctor.fullName).trim() ||
-    !doctor.licenseNumber ||
-    !String(doctor.licenseNumber).trim()
-  ) {
-    throw createError(
-      "The selected doctor's registration details are incomplete. Please update the doctor's record before creating a prescription.",
-      400
-    );
-  }
-
-  return doctor;
-};
-
-// ======================================================
 // Create prescription
 // ======================================================
 
 const createPrescription = async (data, userId) => {
   const {
     prescriptionDate,
-    doctorId,
+    doctorName,
+    doctorLicenseNumber,
     diagnosis,
     notes,
     customerId,
@@ -173,6 +120,13 @@ const createPrescription = async (data, userId) => {
   if (!prescriptionDate) {
     throw createError(
       "Prescription date is required.",
+      400
+    );
+  }
+
+  if (!String(doctorName || "").trim()) {
+    throw createError(
+      "Prescriber name is required.",
       400
     );
   }
@@ -207,7 +161,7 @@ const createPrescription = async (data, userId) => {
     );
   }
 
-  // Validate the prescription items.
+  // Validate prescription items.
   for (const item of items) {
     if (
       !String(item.dosage || "").trim() ||
@@ -237,16 +191,7 @@ const createPrescription = async (data, userId) => {
 
   try {
     // ----------------------------------------------------
-    // 1. Validate the selected registered doctor
-    // ----------------------------------------------------
-
-    const doctor = await getRegisteredDoctor(
-      doctorId,
-      transaction
-    );
-
-    // ----------------------------------------------------
-    // 2. Validate the customer
+    // 1. Validate the customer
     // ----------------------------------------------------
 
     const customer = await Customer.findByPk(customerId, {
@@ -259,7 +204,7 @@ const createPrescription = async (data, userId) => {
     }
 
     // ----------------------------------------------------
-    // 3. Validate the user creating the prescription
+    // 2. Validate the user creating the prescription
     // ----------------------------------------------------
 
     const creator = await User.findByPk(userId, {
@@ -274,7 +219,7 @@ const createPrescription = async (data, userId) => {
     }
 
     // ----------------------------------------------------
-    // 4. Validate the selected medicines
+    // 3. Validate the selected medicines
     // ----------------------------------------------------
 
     const medicines = await Medicine.findAll({
@@ -293,17 +238,18 @@ const createPrescription = async (data, userId) => {
     }
 
     // ----------------------------------------------------
-    // 5. Generate a unique prescription number
+    // 4. Generate a unique prescription number
     // ----------------------------------------------------
 
     const prescriptionNumber =
       await generatePrescriptionNumber(transaction);
 
     // ----------------------------------------------------
-    // 6. Create the prescription
+    // 5. Create the prescription
     //
-    // Doctor details come from the database, not from
-    // values submitted by the frontend.
+    // Prescriber details are entered manually.
+    // doctorId is set to null for new prescriptions.
+    // The existing column is retained for historical data.
     // ----------------------------------------------------
 
     const prescription = await Prescription.create(
@@ -311,9 +257,12 @@ const createPrescription = async (data, userId) => {
         prescriptionNumber,
         prescriptionDate,
 
-        doctorId: doctor.id,
-        doctorName: doctor.fullName.trim(),
-        doctorLicenseNumber: doctor.licenseNumber.trim(),
+        doctorId: null,
+        doctorName: String(doctorName).trim(),
+
+        doctorLicenseNumber: doctorLicenseNumber
+          ? String(doctorLicenseNumber).trim() || null
+          : null,
 
         diagnosis: diagnosis
           ? String(diagnosis).trim()
@@ -331,7 +280,7 @@ const createPrescription = async (data, userId) => {
     );
 
     // ----------------------------------------------------
-    // 7. Create prescription items
+    // 6. Create prescription items
     // ----------------------------------------------------
 
     const prescriptionItems = items.map((item) => ({
@@ -356,13 +305,12 @@ const createPrescription = async (data, userId) => {
     );
 
     // ----------------------------------------------------
-    // 8. Commit the transaction
+    // 7. Commit the transaction
     // ----------------------------------------------------
 
     await transaction.commit();
 
-    // Return the complete prescription, including the
-    // registered doctor, customer, creator, and items.
+    // Return the complete prescription.
     return getPrescriptionById(prescription.id);
   } catch (error) {
     if (!transaction.finished) {

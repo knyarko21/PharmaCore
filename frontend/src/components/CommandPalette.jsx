@@ -1,4 +1,5 @@
 
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -15,7 +16,7 @@ import {
   ShoppingCart,
   Truck,
   UserPlus,
-  Users
+  Users,
 } from "lucide-react";
 
 // ======================================================
@@ -25,11 +26,11 @@ import {
 // Each command has:
 //   id       - unique key
 //   label    - what the user sees
-//   hint     - optional secondary text (path, category, etc.)
+//   hint     - optional secondary text
 //   icon     - lucide icon component
 //   path     - where to navigate
-//   group    - section header ("Navigate", "Create", "Manage")
-//   keywords - extra search terms so users can find by synonym
+//   group    - section header
+//   keywords - extra search terms
 // ======================================================
 
 const COMMANDS = [
@@ -41,7 +42,7 @@ const COMMANDS = [
     icon: LayoutDashboard,
     path: "/dashboard",
     group: "Navigate",
-    keywords: ["home", "overview", "stats", "summary"]
+    keywords: ["home", "overview", "stats", "summary"],
   },
 
   // -------- Catalog --------
@@ -52,7 +53,7 @@ const COMMANDS = [
     icon: Pill,
     path: "/medicines",
     group: "Navigate",
-    keywords: ["catalog", "products", "drugs"]
+    keywords: ["catalog", "products", "drugs"],
   },
   {
     id: "nav-inventory",
@@ -61,7 +62,7 @@ const COMMANDS = [
     icon: Boxes,
     path: "/inventory",
     group: "Navigate",
-    keywords: ["stock", "batches", "supply"]
+    keywords: ["stock", "batches", "supply"],
   },
 
   // -------- Operations --------
@@ -72,7 +73,7 @@ const COMMANDS = [
     icon: ShoppingCart,
     path: "/sales",
     group: "Navigate",
-    keywords: ["pos", "checkout", "transactions", "revenue"]
+    keywords: ["pos", "checkout", "transactions", "revenue"],
   },
   {
     id: "nav-purchases",
@@ -81,7 +82,7 @@ const COMMANDS = [
     icon: Truck,
     path: "/purchases",
     group: "Navigate",
-    keywords: ["orders", "suppliers", "procurement"]
+    keywords: ["orders", "suppliers", "procurement"],
   },
   {
     id: "nav-prescriptions",
@@ -90,7 +91,7 @@ const COMMANDS = [
     icon: FileText,
     path: "/prescriptions",
     group: "Navigate",
-    keywords: ["rx", "dispense", "doctor"]
+    keywords: ["rx", "dispense"],
   },
 
   // -------- People --------
@@ -101,7 +102,7 @@ const COMMANDS = [
     icon: Users,
     path: "/customers",
     group: "Navigate",
-    keywords: ["patients", "clients", "contacts"]
+    keywords: ["patients", "clients", "contacts"],
   },
 
   // -------- Insights --------
@@ -112,7 +113,7 @@ const COMMANDS = [
     icon: BarChart3,
     path: "/analytics",
     group: "Navigate",
-    keywords: ["reports", "charts", "trends", "insights"]
+    keywords: ["reports", "charts", "trends", "insights"],
   },
   {
     id: "nav-audit",
@@ -121,7 +122,7 @@ const COMMANDS = [
     icon: ClipboardList,
     path: "/audit-logs",
     group: "Navigate",
-    keywords: ["history", "activity", "trail"]
+    keywords: ["history", "activity", "trail"],
   },
   {
     id: "nav-settings",
@@ -130,7 +131,7 @@ const COMMANDS = [
     icon: Settings,
     path: "/settings",
     group: "Navigate",
-    keywords: ["preferences", "config", "account"]
+    keywords: ["preferences", "config", "account"],
   },
 
   // -------- Create shortcuts --------
@@ -141,7 +142,7 @@ const COMMANDS = [
     icon: Pill,
     path: "/medicines?action=create",
     group: "Create",
-    keywords: ["new", "register", "product"]
+    keywords: ["new", "register", "product"],
   },
   {
     id: "create-purchase",
@@ -150,7 +151,7 @@ const COMMANDS = [
     icon: Truck,
     path: "/purchases/create",
     group: "Create",
-    keywords: ["order", "supplier", "procurement"]
+    keywords: ["order", "supplier", "procurement"],
   },
   {
     id: "create-sale",
@@ -159,7 +160,7 @@ const COMMANDS = [
     icon: ShoppingCart,
     path: "/sales",
     group: "Create",
-    keywords: ["pos", "checkout", "sell"]
+    keywords: ["pos", "checkout", "sell"],
   },
   {
     id: "create-customer",
@@ -168,17 +169,17 @@ const COMMANDS = [
     icon: UserPlus,
     path: "/customers?action=create",
     group: "Create",
-    keywords: ["patient", "client", "new"]
+    keywords: ["patient", "client", "new"],
   },
   {
     id: "create-prescription",
     label: "Create a new prescription",
-    hint: "Dispense against a doctor's order",
+    hint: "Dispense against a prescription",
     icon: FileText,
     path: "/prescriptions?action=create",
     group: "Create",
-    keywords: ["rx", "dispense", "new"]
-  }
+    keywords: ["rx", "dispense", "new"],
+  },
 ];
 
 // ======================================================
@@ -208,7 +209,7 @@ const CommandPalette = () => {
         command.label,
         command.hint,
         command.group,
-        ...(command.keywords || [])
+        ...(command.keywords || []),
       ]
         .filter(Boolean)
         .join(" ")
@@ -236,13 +237,12 @@ const CommandPalette = () => {
 
     return Array.from(map.entries()).map(([group, items]) => ({
       group,
-      items
+      items,
     }));
   }, [filtered]);
 
   // --------------------------------------------------
-  // Flatten for keyboard navigation. Must match the
-  // order rendered in the JSX below.
+  // Flatten for keyboard navigation.
   // --------------------------------------------------
 
   const flatList = useMemo(
@@ -251,19 +251,19 @@ const CommandPalette = () => {
   );
 
   // --------------------------------------------------
-  // Reset active index when query changes
-  // Deferred to next frame to avoid synchronous setState within effect
+  // Reset active index when query changes.
   // --------------------------------------------------
 
   useEffect(() => {
     const rafId = window.requestAnimationFrame(() => {
       setActiveIndex(0);
     });
+
     return () => window.cancelAnimationFrame(rafId);
   }, [query]);
 
   // --------------------------------------------------
-  // Global keyboard shortcut and navigation
+  // Global keyboard shortcut and navigation.
   // --------------------------------------------------
 
   useEffect(() => {
@@ -304,6 +304,7 @@ const CommandPalette = () => {
 
       if (event.key === "Enter") {
         event.preventDefault();
+
         const command = flatList[activeIndex];
 
         if (command) {
@@ -320,13 +321,13 @@ const CommandPalette = () => {
   }, [open, flatList, activeIndex, navigate]);
 
   // --------------------------------------------------
-  // Autofocus when opened
+  // Autofocus when opened.
   // --------------------------------------------------
 
   useEffect(() => {
     if (open) {
-      // Defer so the element is mounted
       const t = setTimeout(() => inputRef.current?.focus(), 0);
+
       return () => clearTimeout(t);
     }
   }, [open]);
@@ -453,18 +454,26 @@ const CommandPalette = () => {
         <div className="flex items-center justify-between border-t border-white/[0.06] bg-black/30 px-5 py-3">
           <div className="flex items-center gap-4 text-[10px] text-zinc-600">
             <span className="flex items-center gap-1.5">
-              <kbd className="rounded bg-white/[0.04] px-1.5 py-0.5">↑</kbd>
-              <kbd className="rounded bg-white/[0.04] px-1.5 py-0.5">↓</kbd>
+              <kbd className="rounded bg-white/[0.04] px-1.5 py-0.5">
+                ↑
+              </kbd>
+              <kbd className="rounded bg-white/[0.04] px-1.5 py-0.5">
+                ↓
+              </kbd>
               Navigate
             </span>
 
             <span className="flex items-center gap-1.5">
-              <kbd className="rounded bg-white/[0.04] px-1.5 py-0.5">↵</kbd>
+              <kbd className="rounded bg-white/[0.04] px-1.5 py-0.5">
+                ↵
+              </kbd>
               Select
             </span>
 
             <span className="hidden items-center gap-1.5 sm:flex">
-              <kbd className="rounded bg-white/[0.04] px-1.5 py-0.5">ESC</kbd>
+              <kbd className="rounded bg-white/[0.04] px-1.5 py-0.5">
+                ESC
+              </kbd>
               Close
             </span>
           </div>
